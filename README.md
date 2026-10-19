@@ -23,3 +23,7 @@ TestFlight is manual-only and requires owner-managed private signing setup. See 
 ## Privacy and rights
 
 See [privacy notes](PRIVACY.md). No general source or asset license is granted. Public visibility is not an additional redistribution or reuse license.
+
+## Attendance QR (WidgetKit)
+
+The attendance widget accepts fixed QR text in the system widget settings and generates QR images locally. It uses a Live Activity card with scheduled dismissal, rather than an arbitrary overlay. See `docs/ATTENDANCE-QR.md` for setup and device-verification requirements. The widget extension uses `com.hority.toolbox.widgets` and requires its own App Store profile named `match AppStore com.hority.toolbox.widgets`; no App Group or push service is used.

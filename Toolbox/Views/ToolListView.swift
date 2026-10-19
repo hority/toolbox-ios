@@ -71,6 +71,8 @@ struct ToolListView: View {
             TextCounterView()
         case .shortcutSigning:
             ShortcutSigningView()
+        case .attendanceQR:
+            AttendanceQRHelpView()
         }
     }
 }

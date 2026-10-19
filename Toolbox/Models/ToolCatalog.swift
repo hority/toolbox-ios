@@ -3,6 +3,7 @@ import Foundation
 enum ToolID: String, Hashable, Sendable {
     case textCounter
     case shortcutSigning
+    case attendanceQR
 }
 
 enum ToolAvailability: Equatable, Sendable {
@@ -75,6 +76,14 @@ enum ToolCatalog {
             symbol: "signature",
             availability: .available,
             keywords: ["ショートカット", "署名", "shortcut", "signing"]
+        ),
+        ToolDefinition(
+            id: .attendanceQR,
+            title: "登庁・退庁QR",
+            subtitle: "ロック画面から固定QRを一時表示",
+            symbol: "qrcode",
+            availability: .available,
+            keywords: ["登庁", "退庁", "出勤", "退勤", "QR", "ウィジェット"]
         )
     ]
 

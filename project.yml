@@ -21,10 +21,16 @@ targets:
     platform: iOS
     sources:
       - path: Toolbox
+      - path: Shared/AttendanceQR
+    dependencies:
+      - target: ToolboxWidgets
+        embed: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.hority.toolbox
         PRODUCT_NAME: Toolbox
+        PROVISIONING_PROFILE_SPECIFIER: "$(TOOLBOX_APP_PROFILE)"
+        INFOPLIST_KEY_NSSupportsLiveActivities: YES
         INFOPLIST_KEY_CFBundleDisplayName: 工具箱
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.utilities
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
@@ -34,6 +40,27 @@ targets:
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        SUPPORTS_MACCATALYST: NO
+  ToolboxWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: ToolboxWidgets
+      - path: Shared/AttendanceQR
+    info:
+      path: ToolboxWidgets/Info.plist
+      properties:
+        CFBundleDisplayName: 工具箱QR
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.hority.toolbox.widgets
+        PRODUCT_NAME: ToolboxWidgets
+        PROVISIONING_PROFILE_SPECIFIER: "$(TOOLBOX_WIDGET_PROFILE)"
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) TOOLBOX_WIDGET_EXTENSION"
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SKIP_INSTALL: YES
         SUPPORTS_MACCATALYST: NO
   ToolboxTests:
     type: bundle.unit-test
