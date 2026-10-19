@@ -10,6 +10,20 @@
 - WidgetKit stores the widget configuration and ActivityKit holds its content. The app does not write extra payload files, analytics, logs or images
 - Both intent types and attributes are in both targets. Define `TOOLBOX_WIDGET_EXTENSION` in the extension only. `LiveActivityIntent` executes in the host app; `openAppWhenRun` is false
 
+The background-start capability is present in Apple's WWDC24 iOS 18 example:
+`ToggleTimerIntent: LiveActivityIntent` starts/stops an activity from a Control.
+This is not evidence that the complete widget → request → immediate-end display
+path works on every device or that no authentication will be required.
+
+## Swift 6 ownership
+
+The controller's MainActor state is a Boolean operation gate only. It does not
+cache `Activity` objects, which are non-Sendable in the SDK used by the first
+archive. Three explicitly `nonisolated` async helpers perform request, enumeration
+and end calls with task-local handles. Only Sendable configuration, IDs and
+Boolean results cross actor isolation. No blanket Sendable conformance,
+preconcurrency import, unsafe isolation escape or warning suppression is used.
+
 ## Lifecycle: scheduled dismissal, not scheduled active termination
 
 `Activity.request(attributes:content:pushType: nil)` is followed immediately by
@@ -34,11 +48,11 @@ use the system swipe-to-dismiss affordance. `HideAttendanceQRIntent` can stop an
 activity that is still active/stale, and reports a missing/ended activity instead
 of claiming success. It is only used in the brief Dynamic Island fallback.
 
-Repeated taps are serialized during creation. The host attempts to clear known
-earlier cards before creating another, but this is only best effort for cards
-already ended. After process termination, the previous ended card might not be
-returned by `Activity.activities` and may coexist until its original OS dismissal
-date. No persistent handle or payload store is introduced to conceal this limit.
+Repeated taps are gated during an operation. The host attempts to clear cards
+returned by `Activity.activities` before creating another, but this is only best
+effort for cards already ended. An ended card might not be returned by that API
+and may coexist until its original OS dismissal date. No cached or persistent
+activity handle or payload store is introduced to conceal this limit.
 
 ## Rendering
 
@@ -80,6 +94,7 @@ screenshots, source control and test fixtures.
 ## Apple references
 
 - [LiveActivityIntent](https://developer.apple.com/documentation/appintents/liveactivityintent)
+- [WWDC24: Extend your app's controls across the system, 3:13](https://developer.apple.com/videos/play/wwdc2024/10157/?time=193)
 - [Adding interactivity](https://developer.apple.com/documentation/widgetkit/adding-interactivity-to-widgets-and-live-activities)
 - [Displaying Live Activities](https://developer.apple.com/documentation/activitykit/displaying-live-data-with-live-activities)
 - [Ending an activity](https://developer.apple.com/documentation/activitykit/activity/end(_:dismissalpolicy:))

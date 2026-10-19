@@ -4,22 +4,37 @@ import Foundation
 
 @MainActor
 enum AttendanceQRActivityController {
-    // At most the latest handle is retained for best-effort replacement. This
-    // controller writes no files or logs; WidgetKit itself retains configuration
-    // and ActivityKit retains its content as part of their system-managed state.
-    private static var retainedActivities: [String: Activity<AttendanceQRActivityAttributes>] = [:]
-    private static var isStarting = false
+    // Coordinate operations with a Sendable value only. Activity is not
+    // Sendable in the iOS 18 SDK: never cache a handle on this actor and pass it
+    // across isolation to the SDK's nonisolated async end() method.
+    private static var isOperating = false
 
     static func show(_ configuration: AttendanceQRConfiguration) async throws {
-        guard !isStarting else { return }
-        isStarting = true
-        defer { isStarting = false }
+        guard !isOperating else { return }
+        isOperating = true
+        defer { isOperating = false }
+        try await requestAndScheduleDismissal(configuration)
+    }
+
+    static func hide(activityID: String) async -> Bool {
+        guard !isOperating else { return false }
+        isOperating = true
+        defer { isOperating = false }
+        return await endActiveActivity(activityID: activityID)
+    }
+
+    // Each helper owns its non-Sendable Activity handles within one nonisolated
+    // async task. Only Sendable configuration, IDs and results cross MainActor.
+    // No handle is retained, captured in a child task or returned to the actor.
+    private nonisolated static func requestAndScheduleDismissal(
+        _ configuration: AttendanceQRConfiguration
+    ) async throws {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else {
             throw AttendanceQRError.activitiesDisabled
         }
         // Preflight rendering before replacing an existing card.
         _ = try AttendanceQRRenderer.render(payload: configuration.payload, displayScale: 2)
-        await hideAllKnownActivities()
+        await endKnownActivities()
 
         let startedAt = Date()
         let expiresAt = startedAt.addingTimeInterval(TimeInterval(configuration.durationSeconds))
@@ -32,7 +47,6 @@ enum AttendanceQRActivityController {
         let activity = try Activity<AttendanceQRActivityAttributes>.request(
             attributes: attributes, content: content, pushType: nil
         )
-        retainedActivities[activity.id] = activity
 
         // iOS 18 has no end(afterDate:) API. End immediately while retaining the
         // final QR content on the Lock Screen until the OS dismissal date.
@@ -44,10 +58,10 @@ enum AttendanceQRActivityController {
         await activity.end(content, dismissalPolicy: .after(expiresAt))
     }
 
-    static func hide(activityID: String) async -> Bool {
-        let activity = retainedActivities[activityID]
-            ?? Activity<AttendanceQRActivityAttributes>.activities.first { $0.id == activityID }
-        guard let activity else { return false }
+    private nonisolated static func endActiveActivity(activityID: String) async -> Bool {
+        guard let activity = Activity<AttendanceQRActivityAttributes>.activities.first(where: {
+            $0.id == activityID
+        }) else { return false }
         // Do not claim success for an already-ended card. Changing its final
         // content/dismissal a second time is not a documented guarantee.
         switch activity.activityState {
@@ -56,22 +70,16 @@ enum AttendanceQRActivityController {
         }
         await activity.end(ActivityContent(state: activity.content.state.hidden, staleDate: nil),
                            dismissalPolicy: .immediate)
-        retainedActivities[activityID] = nil
         return true
     }
 
-    private static func hideAllKnownActivities() async {
+    private nonisolated static func endKnownActivities() async {
         // Best effort only for ended cards. Following process termination, an
         // earlier ended card may remain until its own OS dismissal date.
-        var activities = retainedActivities
         for activity in Activity<AttendanceQRActivityAttributes>.activities {
-            activities[activity.id] = activity
-        }
-        for activity in activities.values {
             await activity.end(ActivityContent(state: activity.content.state.hidden, staleDate: nil),
                                dismissalPolicy: .immediate)
         }
-        retainedActivities.removeAll()
     }
 }
 #endif
