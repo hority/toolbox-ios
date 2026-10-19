@@ -1,0 +1,15 @@
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+.DS_Store
+.bundle/
+vendor/
+.env
+.env.*
+*.p8
+*.p12
+*.mobileprovision
+*.cer
+*.key
+Toolbox.xcodeproj/

@@ -1,0 +1,17 @@
+default_platform(:ios)
+BUNDLE_ID = 'com.hority.toolbox'
+platform :ios do
+  lane :beta do
+    setup_ci(set_default_keychain: false)
+    key = app_store_connect_api_key(key_id: ENV.fetch('APP_STORE_CONNECT_KEY_ID'), issuer_id: ENV.fetch('APP_STORE_CONNECT_ISSUER_ID'), key_filepath: ENV.fetch('APP_STORE_CONNECT_KEY_PATH'), duration: 1200, in_house: false)
+    team = ENV.fetch('APPLE_TEAM_ID')
+    UI.user_error!('Invalid Team ID') unless team.match?(/\A[A-Z0-9]{10}\z/)
+    match(type: 'appstore', app_identifier: [BUNDLE_ID], team_id: team, api_key: key, storage_mode: 'git', git_url: ENV.fetch('MATCH_GIT_URL'), git_branch: 'signing', clone_branch_directly: true, readonly: true, skip_provisioning_profiles: true, skip_docs: true, generate_apple_certs: false)
+    get_provisioning_profile(api_key: key, app_identifier: BUNDLE_ID, team_id: team, readonly: true, provisioning_name: "match AppStore #{BUNDLE_ID}", ignore_profiles_with_different_name: true, output_path: 'build')
+    previous = latest_testflight_build_number(api_key: key, app_identifier: BUNDLE_ID, version: '0.1.0', initial_build_number: 0)
+    number = previous.to_i + 1
+    profile = "match AppStore #{BUNDLE_ID}"
+    ipa = build_app(project: 'Toolbox.xcodeproj', scheme: 'Toolbox', configuration: 'Release', clean: true, output_directory: 'build', output_name: 'Toolbox.ipa', archive_path: 'build/Toolbox.xcarchive', xcargs: "CURRENT_PROJECT_VERSION=#{number} DEVELOPMENT_TEAM=#{team} CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY='Apple Distribution' PROVISIONING_PROFILE_SPECIFIER='#{profile}'", export_options: {method: 'app-store-connect', signingStyle: 'manual', teamID: team, provisioningProfiles: {BUNDLE_ID => profile}})
+    upload_to_testflight(api_key: key, ipa: ipa, app_identifier: BUNDLE_ID, skip_waiting_for_build_processing: false, wait_processing_interval: 20, wait_processing_timeout_duration: 1200, changelog: '工具箱の初期版。', distribute_external: false, submit_beta_review: false)
+  end
+end
