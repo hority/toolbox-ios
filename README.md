@@ -2,7 +2,7 @@
 
 Independent iPhone and iPad utility collection. Bundle ID: `com.hority.toolbox`.
 
-This initial version contains a tool catalog and a local text counter. Shortcut signing is clearly marked as planned and is not implemented. It does not claim to sign or install shortcuts.
+The app contains a tool catalog, local text counter, and Shortcut signing studio. The signing studio reuses the owner’s earlier utility: import JSON/plist/`.shortcut`, edit and save local drafts with history, export editing data, and request signing from Shortcuty after explicit confirmation. It never runs shortcuts. Optional AI generation, ChatGPT login, paid RoutineHub and custom-server setup from the earlier prototype are not included in this focused port. See [signing notes](docs/SHORTCUT-SIGNING.md).
 
 ## Development
 

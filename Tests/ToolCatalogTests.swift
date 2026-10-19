@@ -18,16 +18,16 @@ final class ToolCatalogTests: XCTestCase {
         XCTAssertEqual(ToolCatalog.tools(matching: " \n\t", filter: .all).count, ToolCatalog.all.count)
     }
 
-    func testAvailableFilterOnlyIncludesImplementedTool() {
-        XCTAssertEqual(ToolCatalog.tools(matching: "", filter: .available).map(\.id), [.textCounter])
+    func testAvailableFilterIncludesBothImplementedTools() {
+        XCTAssertEqual(ToolCatalog.tools(matching: "", filter: .available).map(\.id), [.textCounter, .shortcutSigning])
     }
 
-    func testPlannedFilterOnlyIncludesUnavailableTool() {
-        XCTAssertEqual(ToolCatalog.tools(matching: "", filter: .planned).map(\.id), [.shortcutSigning])
+    func testPlannedFilterIsEmpty() {
+        XCTAssertEqual(ToolCatalog.tools(matching: "", filter: .planned).map(\.id), [])
     }
 
     func testSearchAndAvailabilityFilterBothApply() {
-        XCTAssertTrue(ToolCatalog.tools(matching: "署名", filter: .available).isEmpty)
+        XCTAssertEqual(ToolCatalog.tools(matching: "署名", filter: .available).map(\.id), [.shortcutSigning])
     }
 
     func testUnknownSearchReturnsNoResults() {
@@ -39,9 +39,9 @@ final class ToolCatalogTests: XCTestCase {
         XCTAssertEqual(Set(identifiers).count, identifiers.count)
     }
 
-    func testSigningIsNeverAdvertisedAsAvailable() {
+    func testSigningIsAvailable() {
         let signing = ToolCatalog.all.first { $0.id == .shortcutSigning }
         XCTAssertNotNil(signing)
-        XCTAssertEqual(signing?.availability, .planned)
+        XCTAssertEqual(signing?.availability, .available)
     }
 }

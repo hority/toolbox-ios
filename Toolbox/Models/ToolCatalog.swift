@@ -71,9 +71,9 @@ enum ToolCatalog {
         ToolDefinition(
             id: .shortcutSigning,
             title: "ショートカット署名",
-            subtitle: "今後追加予定のツールです",
+            subtitle: "読み込み・JSON編集・署名・書き出し",
             symbol: "signature",
-            availability: .planned,
+            availability: .available,
             keywords: ["ショートカット", "署名", "shortcut", "signing"]
         )
     ]
