@@ -16,7 +16,7 @@ bash ci/test.sh
 bash ci/build.sh
 ```
 
-`project.yml` is the source of truth for the generated project. The generated Xcode project is ignored. CI tests on an available iPhone simulator and creates an unsigned device archive. Simulator success does not replace real-device testing.
+`project.yml` is the source of truth for the generated project. The generated Xcode project is ignored. Like Penguin, builds run only when manually dispatched; pushes and pull requests do not start builds. The Build iOS workflow creates an unsigned device archive with a 10-minute limit and does not start a simulator. Simulator tests remain available separately in the manual Simulator tests workflow. TestFlight uploads are manual and do not run simulator tests. Simulator success does not replace real-device testing.
 
 TestFlight is manual-only and requires owner-managed private signing setup. See [release instructions](docs/RELEASING.md). This repository contains no Penguin game code, assets, or signing material.
 
