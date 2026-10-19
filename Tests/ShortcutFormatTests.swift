@@ -59,6 +59,7 @@ final class ShortcutFormatTests: XCTestCase {
         XCTAssertEqual(ShortcutFormat.safeName("..."), "Shortcut")
         XCTAssertEqual(ShortcutFormat.safeName("   "), "Shortcut")
         XCTAssertLessThanOrEqual(ShortcutFormat.safeName(String(repeating: "あ", count: 100)).count, 80)
+        XCTAssertLessThanOrEqual(ShortcutFormat.safeName(String(repeating: "👨‍👩‍👧‍👦", count: 100)).utf8.count, 180)
     }
 
     func testHistoryPreservesPreviousContentAndIsCapped() throws {

@@ -84,7 +84,13 @@ enum ShortcutFormat {
         let cleaned = name.components(separatedBy: forbidden).joined(separator: "_")
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .trimmingCharacters(in: CharacterSet(charactersIn: "."))
-        return cleaned.isEmpty ? "Shortcut" : String(cleaned.prefix(80))
+        guard !cleaned.isEmpty else { return "Shortcut" }
+        var result = ""
+        for character in cleaned.prefix(80) {
+            guard result.utf8.count + String(character).utf8.count <= 180 else { break }
+            result.append(character)
+        }
+        return result.isEmpty ? "Shortcut" : result
     }
 
     static func validate(_ draft: ShortcutDraft) throws {
@@ -137,6 +143,7 @@ enum ShortcutFormat {
     var drafts: [ShortcutDraft] = []
     var error: String?
     private let file: URL
+    private var loadFailed = false
 
     init(directory: URL = URL.applicationSupportDirectory.appending(path: "ShortcutLibrary", directoryHint: .isDirectory)) {
         file = directory.appending(path: "drafts.json")
@@ -148,10 +155,16 @@ enum ShortcutFormat {
                 for draft in loaded { try ShortcutFormat.validate(draft) }
                 drafts = loaded
             } else { drafts = [.example]; try save() }
-        } catch { self.error = "編集データを読み込めませんでした。\(error.localizedDescription)" }
+        } catch {
+            loadFailed = true
+            self.error = "編集データを読み込めませんでした。既存ファイルを保護するため保存を中止しています。アプリを開き直してください。\(error.localizedDescription)"
+        }
     }
 
     func save() throws {
+        guard !loadFailed else {
+            throw ShortcutError.message("保存済みデータを読み込めなかったため、上書きを中止しました。アプリを開き直して再度お試しください。")
+        }
         let data = try JSONEncoder().encode(drafts)
         guard data.count <= 64_000_000 else {
             throw ShortcutError.message("ライブラリが64MBを超えています。不要な下書きを書き出して削除してください。")

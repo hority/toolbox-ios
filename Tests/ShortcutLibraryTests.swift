@@ -39,6 +39,7 @@ final class ShortcutLibraryTests: XCTestCase {
         try corrupt.write(to: file)
         let library = ShortcutLibrary(directory: directory)
         XCTAssertNotNil(library.error)
+        XCTAssertThrowsError(try library.upsert(.example))
         XCTAssertEqual(try Data(contentsOf: file), corrupt)
     }
 }
