@@ -1,41 +1,30 @@
-import ActivityKit
 import SwiftUI
 
 struct AttendanceQRHelpView: View {
-    @Environment(\.scenePhase) private var scenePhase
-    @State private var activitiesEnabled = ActivityAuthorizationInfo().areActivitiesEnabled
-
     var body: some View {
         List {
             Section {
-                Label("ロック画面から、必要なときだけQRを表示", systemImage: "qrcode")
+                Label("ロック解除後、すぐ全画面QRへ", systemImage: "qrcode")
                     .font(.headline)
-                Text("固定のQR文字列を設定して使います。QRの作成・表示に通信は使いません。")
+                Text("登庁・退庁で同じ固定QRを使います。設定は1つで十分です。QRの作成・表示に通信は使いません。")
             }
             Section("設定方法") {
                 Text("1. ロック画面を長押しして『カスタマイズ』→ロック画面を選びます。")
-                Text("2. ウィジェット欄から『工具箱』のQRウィジェットを追加します。")
-                Text("3. 追加したウィジェットをタップし、表示名・登庁／退庁・QR内容・表示時間を設定します。")
-                Text("4. 編集を完了して、QRボタンをタップします。登庁用と退庁用を別々に設定できます。")
+                Text("2. ウィジェット欄から『工具箱』の小さい丸型、または横長の勤怠QRを追加します。")
+                Text("3. 編集中に追加したウィジェットをタップし、表示名と共通のQR内容を設定します。")
+                Text("4. 編集を完了し、ウィジェットをタップします。必要なロック解除後、アプリが直接QRを全画面表示します。勤務先の読み取り機器にかざしてください。")
             }
-            Section("表示について") {
-                Label(activitiesEnabled ? "ライブアクティビティを利用できます" : "ライブアクティビティが無効です",
-                      systemImage: activitiesEnabled ? "checkmark.circle" : "exclamationmark.circle")
-                if !activitiesEnabled {
-                    Text("iPhoneの設定で工具箱のライブアクティビティを許可してください。")
-                }
-                Text("カードはiOSが管理するライブアクティビティです。表示位置・認証の要否・削除のタイミングは端末や設定で変わります。30秒または60秒後の削除を予約します。")
-                Text("ロック画面での表示を目的にしています。Dynamic IslandにQRが同じ時間表示され続ける機能ではありません。")
+            Section("表示と画面の消灯") {
+                Text("QR表示中でアプリがアクティブな間だけ、自動スリープを停止します。読み取り後は『閉じる』で一覧に戻れます。アプリを離れるとQRを隠し、自動スリープの設定を元に戻します。戻るとQRを再表示します。")
+                Text("端末のロックやFace ID・パスコードの認証は省略できません。電源ボタンによるロックやシステムの動作を防ぐ機能ではありません。")
+                Text("以前の登庁・退庁や30秒・60秒の設定は保存互換性のため残しますが、全画面表示には使いません。QRは閉じるまで表示します。ライブアクティビティの許可は不要です。")
             }
             Section("大切な注意") {
-                Text("表示中のQRは周囲の人やカメラから読めます。カードを閉じても固定QRそのものは無効になりません。勤務先の利用ルールを確認し、公開してはいけない内容や他人のQRを設定しないでください。")
-                Text("ボタンを押すだけでは登庁・退庁の記録は行いません。勤務先の読み取り機器でQRを読み取ってください。")
-                Text("最初は機密情報を含まないテスト用の文字列で、表示と読み取りを確認してください。QR内容はUTF-8で64バイト以内です。長い内容はQRが細かくなり、読み取れない場合があります。")
+                Text("表示中のQRは周囲の人やカメラから読めます。閉じても固定QR自体は無効になりません。勤務先の利用ルールを確認してください。")
+                Text("表示だけでは登庁・退庁の記録は行いません。打刻結果は勤務先の読み取り機器で確認してください。")
+                Text("QR内容はUTF-8で64バイト以内、表示名は16文字・UTF-8で64バイト以内です。最初は機密情報を含まないテスト用の文字列で、表示と読み取りを確認してください。")
             }
         }
         .navigationTitle("登庁・退庁QR")
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .active { activitiesEnabled = ActivityAuthorizationInfo().areActivitiesEnabled }
-        }
     }
 }

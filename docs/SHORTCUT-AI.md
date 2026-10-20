@@ -1,0 +1,40 @@
+# ChatGPT shortcut drafts (implementation preparation)
+
+Based on Toolbox master `848417845e95212c4392a6c05427e647c09b09df`. Adapted the owner's `hority/ios-testflight-smoke` sources at `7582033192b58a8de6c4ce4e6d424a89421784fb` (`ChatGPTLogin`, `StudioCredentials`, `StudioAI`, `StudioViews`, and `docs/SHORTCUT-STUDIO.md`). No credentials or settings are migrated from that app.
+
+## User flow and data boundaries
+
+Open the existing shortcut mini app and choose **AIで新しく作る**, or open a draft and choose **AIで作成・編集**. **Continue with ChatGPT** starts browser consent. Select a saved account or add another; returning sign-in reuses that registration's client ID. Models are fetched with that account's token after login and through an explicit refresh button. There is no baked-in model fallback, API-key entry, or guarantee of eligibility based on plan name.
+
+Type a request. Sending the current draft is **off by default** on every screen opening. If selected, review its name and full JSON; that includes embedded text, URLs and attachments. Confirm the destination (`api.openai.com`) and request before generation. The generation screen has no library, QR store, history, or signer dependency. Only the request and explicitly selected current name/source enter the API body. Do not paste secrets or sensitive QR values into the request or selected draft. `store:false` does not mean no processing or retention under the provider's policies.
+
+Only a successful, completed stream can become an editable preview. Review actions and edit the name/JSON, then explicitly save. Saving a revision uses the existing history logic. Cancellation, refusal, invalid JSON, failed/incomplete streams and stale account completions leave the existing draft untouched. The app cannot prove that model-generated action identifiers or behavior are correct. Nothing executes automatically. Signing remains a separate action with the existing **per-request Shortcuty destination/full-data confirmation**.
+
+## Verified public protocol (2026-10-20)
+
+- [Overview](https://developers.openai.com/siwc/token-sharing-open-source): direct ChatGPT plan use is documented for eligible open-source, locally running clients, not just identity login.
+- [Registration/sign-in](https://developers.openai.com/siwc/token-sharing-open-source/sign-in): first use `dynamic_agent_client`, actual app name `Toolbox`, stable random opaque host ID, system browser, loopback `127.0.0.1`, fresh PKCE S256/state/nonce. The issued client ID and exact attempt callback URI are used in code exchange. Returning sign-in validates the original account and client. Duplicate callback query fields are rejected.
+- [Accounts/sessions](https://developers.openai.com/siwc/token-sharing-open-source/profiles-and-sessions): separate account registrations, retaining client/subject mapping after sign-out; ID token hints are removed on sign-out. Refreshes are serialized; the rotated refresh token, access token, expiry and scopes are committed as one Keychain item before consumers receive the new token. A failed/uncertain refresh requires sign-in instead of retrying a potentially spent refresh token.
+- [Models/inference](https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference): only account catalog `models` entries with `visibility:list`, preserving server order; `slug` is sent as `model`. Only public `https://api.openai.com/v1/responses`, `store:false`, `stream:true`, explicit input array and instructions. No private `backend-api` or borrowed client IDs.
+- [Preview limits](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations): no unsupported sampling, output-limit, conversation, previous-response, tool or background fields. No tools are available to the model.
+- Read-only [OpenID discovery](https://auth.openai.com/.well-known/openid-configuration) confirmed issuer, RS256/JWKS, authorization, token, and revocation endpoints. Endpoints are fixed; credential-bearing HTTP redirects are refused.
+
+ID token verification checks the RSA signature using the fixed OpenAI JWKS, issuer, audience/authorized party, expiry/not-before, subject and attempt nonce. The token response must have Bearer type, a bounded positive expiry, a replacement refresh token and the required identity/offline/inference scopes. Refresh may retain the previous scope list if the provider omits `scope`, and may retain the previously validated identity if it omits a new ID token. Access tokens are used only as bearer credentials, never decoded to infer plan eligibility.
+
+Credentials and host ID use `com.hority.toolbox.chatgpt` Keychain service with `WhenUnlockedThisDeviceOnly`; no old app namespace or API key is read. All auth continuations have attempt IDs, cancellation and a 180-second timeout. A pending attempt remains occupied through exchange/validation. Auth epochs reject sign-in, refresh, model-list and generation completions after sign-out/account change. OAuth/model requests have finite deadlines; streaming has a 180-second resource limit and bounded frames/output. No prompts, shortcut JSON, auth URLs, tokens or provider response bodies are logged. HTTP status/recovery errors are shown without echoing remote payloads.
+
+Logout immediately stops local use and cancels the UI request, removes tokens while retaining registration mapping, and attempts revocation with one brief retry for network/5xx failures. If remote revocation is unconfirmed, the UI links to ChatGPT settings. If Keychain writing fails, the UI reports it; deletion cannot be guaranteed across app restart until storage becomes writable or the user disconnects the app remotely.
+
+## Verification and remaining decisions
+
+Prepared XCTest fixtures cover callback/state/duplicate/client handling; identity claims/scopes; partial/failed/refused/completed SSE; selected-material-only request bodies; catalog filtering/order; invalid proposals; stale login/refresh after logout; repeated login; rotating-token atomic persistence and persistence failure; stale model catalogs after account switch. They use synthetic data and injected dependencies, never real credentials or inference.
+
+This Linux preparation environment has no Swift compiler or Xcode. Tree-sitter syntax parsing and `git diff --check` are static checks, **not Swift compilation or XCTest execution**. No app login, dynamic registration, inference, signing, simulator, CI, push, account setup, signing configuration change, or release was performed.
+
+Required later checks: Xcode/iOS 18 build with Swift 6, run the focused XCTest targets on an authorized Mac, then user-operated device consent (including loopback browser return), cancellation/timeouts, account reauthorization/switch, refresh/logout, current catalog, generation interruption, preview/save/history and separate signing. Apple Shortcuts remains the final import/trust and runtime validator.
+
+**Unverified eligibility and consent:** the official overview describes open-source and locally hosted apps. This preparation has not established this app/account’s eligibility or completed user consent. No mandatory OSI license list or rule making the absence of a LICENSE file a release blocker was verified; no such requirement is asserted here. No license was added or changed, and no OpenAI approval is claimed. Branding and App Store privacy disclosures remain items for publication review.
+
+## Integration with the QR change
+
+The independent QR patch supplied by the parent (SHA-256 `4f6e6ccfade900e9133c24b8ea24d1d44a30563224f85463a5fbee56f6adfd49`) applied cleanly to the same base. Its `ToolboxApp.swift` routing changes are preserved. The AI implementation does not alter `ToolboxApp.swift`, `ToolCatalog.swift`, `project.yml`, widgets, or signing configuration. XcodeGen already includes new source files under `Toolbox` and tests under `Tests`. QR source review did not establish device correctness: cold/warm routing, Vision/XCTest, idle-timer restoration and real-device behavior remain unverified here.

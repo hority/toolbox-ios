@@ -56,7 +56,7 @@ enum AttendanceQRError: LocalizedError, Equatable {
     }
 }
 
-/// A deliberately small payload budget keeps a 136-point QR readable.
+/// A deliberately small payload budget keeps the Lock Screen QR readable.
 /// Payload bytes are never trimmed, normalized, escaped or interpreted as a URL.
 struct AttendanceQRConfiguration: Equatable, Sendable {
     static let maximumPayloadBytes = 64

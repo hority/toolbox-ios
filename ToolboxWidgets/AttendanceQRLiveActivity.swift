@@ -14,7 +14,7 @@ struct AttendanceQRLiveActivity: Widget {
             // so these are brief fallback presentations, not a persistent QR.
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    Label(context.attributes.operation.title, systemImage: "qrcode")
+                    Label("勤怠QR", systemImage: "qrcode")
                 }
                 DynamicIslandExpandedRegion(.trailing) {
                     Text(context.attributes.label).lineLimit(1)
@@ -36,7 +36,7 @@ struct AttendanceQRLiveActivity: Widget {
             } compactLeading: {
                 Image(systemName: "qrcode")
             } compactTrailing: {
-                Text(context.attributes.operation == .arrival ? "登" : "退")
+                Text("QR")
             } minimal: {
                 Image(systemName: "qrcode")
             }
@@ -65,11 +65,9 @@ private struct AttendanceQRActivityCard: View {
                     .font(.system(size: 15, weight: .semibold))
                     .lineLimit(1)
                     .truncationMode(.tail)
-                Text(context.attributes.operation.title)
-                    .font(.system(size: 14, weight: .medium))
                 if canShowQR {
                     HStack(spacing: 3) {
-                        Text("非表示まで")
+                        Text("終了目安")
                         Text(timerInterval: context.state.startedAt...context.state.expiresAt,
                              countsDown: true, showsHours: false)
                             .monospacedDigit()
@@ -104,7 +102,7 @@ private struct AttendanceQRActivityCard: View {
                 ZStack(alignment: .topLeading) {
                     Color.white
                     Image(code.image, scale: displayScale,
-                          label: Text("\(context.attributes.operation.title)用の固定QRコード"))
+                          label: Text("登庁・退庁共通の固定QRコード"))
                         .interpolation(.none)
                         .widgetAccentedRenderingMode(.fullColor)
                         .frame(width: code.pointSide, height: code.pointSide)

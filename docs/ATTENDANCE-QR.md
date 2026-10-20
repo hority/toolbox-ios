@@ -2,9 +2,26 @@
 
 ## Intended behavior
 
-Configure a fixed QR payload, label, attendance direction and 30/60-second duration in the system widget editor. A Lock Screen button invokes a LiveActivityIntent without deliberately opening the main app. Core Image generates the QR on-device. No network request records attendance: the workplace reader must scan the code.
+Add the small circular **勤怠QR** widget in Lock Screen customization, then tap it
+while still editing to set a label and the fixed QR text. Arrival and departure
+use one identical QR. Existing rectangular widgets also work. Finish editing;
+tapping the widget opens Toolbox directly to a full-screen QR after any required
+system unlock. Invalid or missing configuration opens setup instructions.
 
-The temporary card is a system-managed Live Activity, not a custom popup or arbitrary Lock Screen overlay. The implementation requests an activity and ends it with a future dismissal policy. This means the activity is ended immediately and its Lock Screen UI is retained until scheduled dismissal. Dynamic Island presentation can disappear immediately. No background timer or process lifetime is relied upon. iOS determines visibility, authentication and dismissal timing; verify on a real device before relying on this at work.
+The QR is generated locally and remains until Close. While it is visible and the
+app is active, ordinary idle sleep is disabled. Leaving the app hides the QR and
+restores the previous idle-timer state; returning shows it again. Close returns
+to the catalog. This does not bypass authentication or prevent the power button
+from locking the device. No Live Activity permission is required for this flow.
+
+Old operation/duration settings remain stored for compatibility but do not affect
+the full-screen QR. The current widget no longer invokes the old Live Activity
+button. WidgetKit may retain an earlier snapshot until its timeline reloads;
+re-add the widget if it still behaves like the old release.
+
+WidgetKit delivers the selected configuration through NSUserActivity; QR payloads
+are not placed in URLs, logs or additional app storage. No App Group is needed.
+See [implementation notes](ATTENDANCE-QR-IMPLEMENTATION.md) for lifecycle details.
 
 ## Apple signing setup
 
@@ -19,7 +36,7 @@ No new key, certificate or GitHub secret is expected for this extension. If exis
 
 - Fast unsigned device archive includes the embedded extension; no simulator is started by the build workflow.
 - Unit tests remain a separate manual workflow. QR tests use synthetic text only.
-- Real iPhone: configure separate attendance widgets, tap while locked, verify any authentication requirement, placement and readable size, verify 30/60-second dismissal, repeat taps, dismiss/close, test disabled Live Activities and device restart.
+- Real iPhone: verify circular and existing rectangular widgets, cold/warm launch, exact tapped configuration, lock/authentication, repeat taps, close, background/foreground, screen locking, idle-timer restoration, rotation and readable size.
 - Scan a synthetic QR from a second device/reader and confirm the exact decoded text. Confirm workplace approval before entering actual attendance data.
 - On-device display, timing and reader compatibility are not established merely by a successful archive.
 

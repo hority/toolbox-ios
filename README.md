@@ -2,7 +2,9 @@
 
 Independent iPhone and iPad utility collection. Bundle ID: `com.hority.toolbox`.
 
-The app contains a tool catalog, local text counter, and Shortcut signing studio. The signing studio reuses the owner’s earlier utility: import JSON/plist/`.shortcut`, edit and save local drafts with history, export editing data, and request signing from Shortcuty after explicit confirmation. It never runs shortcuts. Optional AI generation, ChatGPT login, paid RoutineHub and custom-server setup from the earlier prototype are not included in this focused port. See [signing notes](docs/SHORTCUT-SIGNING.md).
+The app contains a tool catalog, local text counter, and Shortcut signing studio. The signing studio reuses the owner’s earlier utility: import JSON/plist/`.shortcut`, edit and save local drafts with history, export editing data, and request signing from Shortcuty after explicit confirmation. It never runs shortcuts. Optional ChatGPT login and AI generation create editable draft previews after explicit transmission confirmation. Only selected current draft material is sent; library history and QR configuration are excluded. Paid RoutineHub and custom-server setup are not included. See [signing notes](docs/SHORTCUT-SIGNING.md) and [AI implementation and verification notes](docs/SHORTCUT-AI.md).
+
+ChatGPT flow eligibility and actual user consent remain unverified; this preparation does not infer a licensing requirement from the repository’s existing rights notice.
 
 ## Development
 
@@ -26,4 +28,4 @@ See [privacy notes](PRIVACY.md). No general source or asset license is granted. 
 
 ## Attendance QR (WidgetKit)
 
-The attendance widget accepts fixed QR text in the system widget settings and generates QR images locally. It uses a Live Activity card with scheduled dismissal, rather than an arbitrary overlay. See `docs/ATTENDANCE-QR.md` for setup and device-verification requirements. The widget extension uses `com.hority.toolbox.widgets` and requires its own App Store profile named `match AppStore com.hority.toolbox.widgets`; no App Group or push service is used.
+The attendance widget accepts fixed QR text in the system widget settings and generates QR images locally. Its circular or rectangular Lock Screen launcher opens a full-screen shared arrival/departure QR after normal system authentication, preventing idle sleep only while the QR is visible and the app is active. See `docs/ATTENDANCE-QR.md` for setup and device-verification requirements. The widget extension uses `com.hority.toolbox.widgets` and requires its own App Store profile named `match AppStore com.hority.toolbox.widgets`; no App Group or push service is used.

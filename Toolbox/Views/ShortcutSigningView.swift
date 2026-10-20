@@ -3,6 +3,8 @@ import UniformTypeIdentifiers
 
 struct ShortcutSigningView: View {
     @State private var library = ShortcutLibrary()
+    @State private var account = ChatGPTAccount()
+    @State private var showAI = false
     @State private var showImport = false
     @State private var importing = false
     @State private var importTask: Task<Void, Never>?
@@ -17,6 +19,8 @@ struct ShortcutSigningView: View {
                     .font(.headline).foregroundStyle(Color.accentColor)
                 Text("前に作ったショートカットを、この端末で編集。署名したファイルを共有・保存できます。")
                     .font(.subheadline).foregroundStyle(.secondary)
+                Button { showAI = true } label: { Label("AIで新しく作る", systemImage: "sparkles") }
+                    .disabled(importing)
                 Button { createSample() } label: { Label("サンプルから作る", systemImage: "plus.circle") }
                     .disabled(importing)
                 Button { showImport = true } label: { Label("ファイルから読み込む", systemImage: "square.and.arrow.down") }
@@ -29,7 +33,7 @@ struct ShortcutSigningView: View {
             Section("編集ライブラリ") {
                 ForEach(library.drafts.sorted { $0.modified > $1.modified }) { draft in
                     NavigationLink {
-                        ShortcutEditor(draft: draft, library: library)
+                        ShortcutEditor(draft: draft, library: library, account: account)
                     } label: {
                         VStack(alignment: .leading, spacing: 6) {
                             Text(draft.name).font(.headline)
@@ -45,14 +49,20 @@ struct ShortcutSigningView: View {
             }
             Section {
                 Text("JSON、plist、.shortcut、前のツールの編集用JSONに対応しています。署名済みファイルは『誰でも』で共有したものを選んでください。")
-                Text("編集内容・履歴は端末内に保存します。署名時のみ、確認後にShortcutyへショートカットの全内容を送信します。ショートカットは自動実行しません。")
+                Text("編集内容・履歴は端末内に保存します。AI生成時は確認した指示・選択内容をOpenAIへ、署名時は別の確認後にShortcutyへ全内容を送信します。ショートカットは自動実行しません。")
                 Link("Shortcutyの署名サービス", destination: URL(string: "https://sign.shortcuty.app")!)
             }.font(.footnote).foregroundStyle(.secondary)
         }
         .navigationTitle("ショートカット署名")
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(item: $selectedID) { id in
-            if let draft = library.drafts.first(where: { $0.id == id }) { ShortcutEditor(draft: draft, library: library) }
+            if let draft = library.drafts.first(where: { $0.id == id }) { ShortcutEditor(draft: draft, library: library, account: account) }
+        }
+        .sheet(isPresented: $showAI) {
+            ShortcutGenerationView(account: account, currentDraft: nil) { draft in
+                try library.upsert(draft)
+                selectedID = draft.id
+            }
         }
         .fileImporter(isPresented: $showImport,
                       allowedContentTypes: [UTType(filenameExtension: "shortcut") ?? .data, .json, .propertyList, .data]) { result in
@@ -114,6 +124,8 @@ private struct ShortcutExportDocument: FileDocument {
 private struct ShortcutEditor: View {
     @State var draft: ShortcutDraft
     let library: ShortcutLibrary
+    let account: ChatGPTAccount
+    @State private var showAI = false
     @State private var busy = false
     @State private var signingTask: Task<Void, Never>?
     @State private var error: String?
@@ -145,6 +157,7 @@ private struct ShortcutEditor: View {
                 }
             }
             Section("編集・保存") {
+                Button { showAI = true } label: { Label("AIで作成・編集", systemImage: "sparkles") }
                 Button { showSource = true } label: { Label("名前・JSONを編集", systemImage: "curlybraces") }
                 Button { showHistory = true } label: { Label("変更履歴（\(draft.revisions.count)）", systemImage: "clock.arrow.circlepath") }
                     .disabled(draft.revisions.isEmpty)
@@ -160,6 +173,11 @@ private struct ShortcutEditor: View {
         }
         .navigationTitle("編集")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $showAI) {
+            ShortcutGenerationView(account: account, currentDraft: draft) { value in
+                try apply(name: value.name, source: value.source, summary: value.summary)
+            }
+        }
         .sheet(isPresented: $showSource) {
             ShortcutSourceEditor(name: draft.name, source: draft.source) { name, source in
                 try apply(name: name, source: source, summary: "名前・JSONを手動で編集しました。")
@@ -261,7 +279,7 @@ private struct ShortcutEditor: View {
     }
 }
 
-private struct ShortcutActionList: View {
+struct ShortcutActionList: View {
     let source: String
     private var actions: [[String: Any]] { ((try? ShortcutFormat.workflow(source))?["WFWorkflowActions"] as? [[String: Any]]) ?? [] }
     private let names = ["gettext": "テキスト", "alert": "アラートを表示", "url": "URL", "openurl": "URLを開く", "getclipboard": "クリップボードを取得", "setclipboard": "クリップボードにコピー", "ask": "入力を要求", "showresult": "結果を表示"]

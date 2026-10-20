@@ -4,7 +4,7 @@ import Foundation
 struct AttendanceQRWidgetConfigurationIntent: WidgetConfigurationIntent {
     static var title: LocalizedStringResource { "勤怠QRの設定" }
     static var description: IntentDescription {
-        IntentDescription("固定QRを一時表示します。内容はUTF-8で64バイト以内。表示を消してもQR自体は無効になりません。")
+        IntentDescription("登庁・退庁共通の固定QRをアプリで全画面表示します。内容はUTF-8で64バイト以内。表示を消してもQR自体は無効になりません。")
     }
 
     @Parameter(title: "表示名（16文字以内）", default: "勤怠QR")
@@ -13,9 +13,12 @@ struct AttendanceQRWidgetConfigurationIntent: WidgetConfigurationIntent {
     @Parameter(title: "QRの内容（UTF-8で64バイト以内）", default: "")
     var payload: String
 
+    // Keep the legacy stored value, but omit this choice from the widget editor.
+    // Arrival and departure use the same fixed QR.
     @Parameter(title: "登庁・退庁", default: .arrival)
     var operation: AttendanceQROperation
 
+    // Legacy duration is retained for saved configurations, not fullscreen lifetime.
     @Parameter(title: "表示時間", default: .thirtySeconds)
     var duration: AttendanceQRDuration
 
@@ -23,8 +26,6 @@ struct AttendanceQRWidgetConfigurationIntent: WidgetConfigurationIntent {
         Summary {
             \.$label
             \.$payload
-            \.$operation
-            \.$duration
         }
     }
 
@@ -34,6 +35,8 @@ struct AttendanceQRWidgetConfigurationIntent: WidgetConfigurationIntent {
     }
 }
 
+/// Legacy Live Activity intent retained for already-archived widgets.
+/// The current launcher uses NSUserActivity and does not invoke this intent.
 /// Compile this type into both targets. LiveActivityIntent routes perform() to
 /// the containing app process without opening its UI (openAppWhenRun = false).
 /// See https://developer.apple.com/documentation/appintents/liveactivityintent

@@ -15,20 +15,23 @@ enum AttendanceQRRenderer {
         let symbolModules: Int
         let pixelsPerModule: Int
         let displayScale: CGFloat
+        let canvasSide: CGFloat
 
         var quietZonePixels: Int { AttendanceQRRenderer.quietZoneModules * pixelsPerModule }
         var pointSide: CGFloat { CGFloat(image.width) / displayScale }
         // An odd spare pixel belongs to the trailing/bottom edge. Centering it
         // fractionally would put otherwise sharp module edges on half-pixels.
         var leadingInset: CGFloat {
-            floor((AttendanceQRRenderer.presentationSide * displayScale - CGFloat(image.width)) / 2)
+            floor((canvasSide * displayScale - CGFloat(image.width)) / 2)
                 / displayScale
         }
     }
 
-    static func render(payload: String, displayScale: CGFloat) throws -> RenderedCode {
+    static func render(payload: String, displayScale: CGFloat,
+                       canvasSide: CGFloat = presentationSide) throws -> RenderedCode {
         try AttendanceQRConfiguration.validatePayload(payload)
-        guard displayScale.isFinite, (1...4).contains(displayScale) else {
+        guard displayScale.isFinite, (1...4).contains(displayScale),
+              canvasSide.isFinite, (136...1024).contains(canvasSide) else {
             throw AttendanceQRError.invalidDisplayScale
         }
 
@@ -79,7 +82,7 @@ enum AttendanceQRRenderer {
             throw AttendanceQRError.unsupportedCodeSize
         }
         let totalModules = modules + 2 * quietZoneModules
-        let pixelsPerModule = Int((presentationSide * displayScale) / CGFloat(totalModules))
+        let pixelsPerModule = Int((canvasSide * displayScale) / CGFloat(totalModules))
         guard pixelsPerModule >= 2 else { throw AttendanceQRError.invalidDisplayScale }
         let side = totalModules * pixelsPerModule
         var pixels = [UInt8](repeating: 255, count: side * side)
@@ -103,6 +106,6 @@ enum AttendanceQRRenderer {
                 provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent
               ) else { throw AttendanceQRError.renderingFailed }
         return RenderedCode(image: image, symbolModules: modules,
-                            pixelsPerModule: pixelsPerModule, displayScale: displayScale)
+                            pixelsPerModule: pixelsPerModule, displayScale: displayScale, canvasSide: canvasSide)
     }
 }

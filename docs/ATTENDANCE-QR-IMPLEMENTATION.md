@@ -1,103 +1,111 @@
 # Attendance QR implementation and verification
 
-## Contract
+## Current flow
 
-- iOS 18 / Swift 6, `AppIntentConfiguration`, Lock Screen `accessoryRectangular`
-- Label, verbatim UTF-8 QR payload, 登庁/退庁 and 30/60 seconds are configured per widget
-- Empty/whitespace-only payloads and payloads exceeding 64 UTF-8 bytes are rejected
-- The verb label is descriptive; it does not modify payload bytes or confirm that a time clock accepted a scan
-- Widget parameters are passed directly to `ShowAttendanceQRIntent`; no App Group, shared database or network is required
-- WidgetKit stores the widget configuration and ActivityKit holds its content. The app does not write extra payload files, analytics, logs or images
-- Both intent types and attributes are in both targets. Define `TOOLBOX_WIDGET_EXTENSION` in the extension only. `LiveActivityIntent` executes in the host app; `openAppWhenRun` is false
+The small circular Lock Screen widget (or an existing rectangular widget) opens
+Toolbox directly to a full-screen QR after the system's normal authentication.
+Arrival and departure use the same verbatim payload. There is no intervening Live
+Activity or enlargement button in this route. Close returns to the tool catalog.
+An unconfigured, invalid or missing configuration opens setup guidance instead.
 
-The background-start capability is present in Apple's WWDC24 iOS 18 example:
-`ToggleTimerIntent: LiveActivityIntent` starts/stops an activity from a Control.
-This is not evidence that the complete widget → request → immediate-end display
-path works on every device or that no authentication will be required.
+`AttendanceQRWidget` retains its kind and configuration intent type. It uses the
+normal WidgetKit tap behavior, without `Button`, `Link` or `widgetURL`. WidgetKit
+passes an `NSUserActivity` containing the tapped widget's configuration. The scene
+delegate checks `WidgetCenter.UserInfoKey.kind`, then uses
+`widgetConfigurationIntent(of:)`; it never chooses the first installed widget or
+places a QR in a URL. No custom URL scheme or guessed activity type is needed.
 
-## Swift 6 ownership
+Cold launch reads `connectionOptions.userActivities`; warm delivery uses
+`scene(_:continue:)`. Both enter the same handler. SwiftUI injects the observable
+scene delegate into that scene's environment. Each scene owns its own presentation
+state. Repeat taps replace that scene's current configuration; they do not stack
+modal presentations. Closing clears that scene's payload reference.
 
-The controller's MainActor state is a Boolean operation gate only. It does not
-cache `Activity` objects, which are non-Sendable in the SDK used by the first
-archive. Three explicitly `nonisolated` async helpers perform request, enumeration
-and end calls with task-local handles. Only Sendable configuration, IDs and
-Boolean results cross actor isolation. No blanket Sendable conformance,
-preconcurrency import, unsafe isolation escape or warning suppression is used.
+## Compatibility and privacy
 
-## Lifecycle: scheduled dismissal, not scheduled active termination
+Label and payload retain their original parameter names, validation limits
+(16 characters / 64 UTF-8 bytes for label; 64 UTF-8 bytes for payload) and verbatim
+payload semantics. Legacy operation and duration parameters, enum cases, intent
+identities and activity types remain in the binary for archived configurations.
+Operation and duration are omitted from the editor summary and ignored by the
+full-screen route. Existing rectangular widgets remain supported. Changing to a
+circular widget is optional; add the small variant in the Lock Screen editor.
 
-`Activity.request(attributes:content:pushType: nil)` is followed immediately by
-`await activity.end(content, dismissalPolicy: .after(expiresAt))`.
+Legacy Live Activity code is retained for previously archived buttons/cards, but
+the current widget view never calls it. An old widget snapshot may remain until
+WidgetKit reloads its timeline; update/re-add the widget if necessary. The old
+request-then-immediate-end path was not a scheduled active timer: `.after` controls
+removal of already-ended content. This patch does not rely on that lifecycle.
 
-Apple's iOS 18 public API does **not** have an `end(afterDate:)` operation. The
-code ends the activity immediately, preserves the final QR content on the Lock
-Screen, and asks the OS to remove that ended card after 30 or 60 seconds. It does
-not keep a background task alive, schedule a notification, request background
-execution, or depend on the app remaining alive. Dynamic Island ends immediately;
-its supplied layouts are fallback/brief presentations, not a lasting QR surface.
+No App Group, entitlement, provisioning-profile, credential, network, analytics,
+extra payload file, log or persistent app storage is introduced. WidgetKit owns
+the saved configuration. The QR is removed from the view when the scene becomes
+inactive, and is marked privacy-sensitive; device testing must check app-switcher
+snapshots. Screen recording/screenshots and copies of the fixed QR cannot be
+revoked by closing the screen.
 
-The OS owns actual presentation/removal timing. No sub-second deadline or
-unconditional visibility is promised. `staleDate`, `context.isStale` and explicit
-date validation suppress a QR whenever an expired view is rendered; reading
-`Date()` is not a scheduler and does not itself cause a redraw. Dismissing a card
-does not revoke a fixed QR or invalidate copies/screenshots of its payload.
+## Rendering and idle sleep
 
-An already-ended card is not guaranteed to support a second content update,
-second end call, or interactive button. The Lock Screen card therefore says to
-use the system swipe-to-dismiss affordance. `HideAttendanceQRIntent` can stop an
-activity that is still active/stale, and reports a missing/ended activity instead
-of claiming success. It is only used in the brief Dynamic Island fallback.
+The QR canvas fills the smaller available dimension after safe areas, a close
+header, concise instructions and 16-point outer padding. It is capped at 1024
+points. Canvas size and placement are snapped to physical pixels. The renderer
+keeps M correction, strips Core Image's border, adds exactly four white modules
+on every edge and renders whole physical pixels per module, without interpolation.
+The quiet zone is part of the canvas, not part of the usable QR matrix.
 
-Repeated taps are gated during an operation. The host attempts to clear cards
-returned by `Activity.activities` before creating another, but this is only best
-effort for cards already ended. An ended card might not be returned by that API
-and may coexist until its original OS dismissal date. No cached or persistent
-activity handle or payload store is introduced to conceal this limit.
+For a symbol with N modules, scale S and canvas C:
 
-## Rendering
+- Pixels per module: floor(C × S / (N + 8))
+- Usable matrix side: N × pixels per module / S
+- Bitmap side including quiet zone: (N + 8) × pixels per module / S
+- Each quiet-zone edge: 4 × pixels per module / S
 
-Core Image generates an M-correction QR. The renderer finds and removes the
-generator's border, then adds exactly four white modules on every edge. It checks
-for a valid 21–37 module symbol and paints each module at an integer physical
-pixel size into a binary black/white bitmap. No interpolation, fractional resize,
-URL lookup, remote QR service, tinting or cached personal image is used.
+The released card used a 136-point canvas in a 156-point card. This full-screen
+view sizes to actual available space, so there is no single fixed new QR size.
+For example, a 361-point canvas at 3x with a 29-module symbol gives a 280.33-point
+matrix in a 357.67-point bitmap, including a 38.67-point quiet zone per edge.
+These are layout calculations, not measurements of a real device or user's QR.
 
-The QR sits inside a 136-point white square; the full card is 156 points tall.
-At 2x/3x display scale, the bitmap including its quiet zone is 123–136 points
-depending on QR version. Spare pixels are assigned asymmetrically when needed
-so the image origin is not shifted onto a half pixel. The QR is privacy-sensitive
-and can be hidden by system redaction; users must check their Lock Screen settings.
-Real scanners, screen brightness, Always-On dimming, contrast and user settings
-can affect readability.
+A successfully rendered QR in an active scene acquires an idle-timer lease.
+Inactive/background, close, rendering failure or disappearance releases it.
+The first lease snapshots `UIApplication.isIdleTimerDisabled`; the last release
+restores that value, including a preexisting `true`. Duplicate callbacks are
+idempotent and multiple scenes cannot prematurely release each other's lease.
+Foregrounding takes a new snapshot. No brightness, system Auto-Lock setting,
+audio session, background execution or authentication policy is changed.
+This prevents ordinary idle sleep while viewing the QR, not deliberate device
+locking or other system interruptions. The full-screen QR has no 30/60-second
+expiry; the user closes it after scanning.
 
-## Verification status
+## Verification
 
-No Xcode/Swift toolchain is installed in the implementation environment. No
-simulator or Vision test has been run, and no device behavior is claimed verified.
-The optional, manually dispatched simulator tests include:
+The editing environment is Linux without Swift, Xcode or XcodeGen. No iOS build,
+XCTest, Vision test, simulator, camera, authentication or real-device behavior has
+been run here. No external CI was launched. `git diff --check` and local patch
+application checks are the available static checks; see the accompanying local
+verification report for results.
 
-- Vision QR decoding to exact `payloadData` UTF-8 bytes at 2x and 3x
-- ASCII, Japanese, decomposed Unicode, whitespace and maximum-length fixtures
-- Exact four-module white quiet zone, integer modules and binary pixels
-- 64-byte input limit, label validation, 30/60-second-only validation
-- Expired, stale, stopped and malformed content states do not expose a QR
-- Intent parameters preserve bytes and do not request foreground app opening
-- Encoded activity attributes/content remain well below 4 KB
+Source tests added for routing to setup/QR, replacing repeated requests, close and
+reopen, ignoring unrelated activities, legacy operation/duration, idle restoration
+from both prior states, multiple scene leases, larger render sizes, quiet zones,
+pixel alignment and Vision byte decoding. The routing tests inject configuration
+extraction; they do not simulate WidgetKit's archive or OS cold/warm scene delivery.
+Existing tests remain intact. Simulator tests remain optional and manual-only.
 
-Before release, manually check on an iPhone: app UI does not open from the widget;
-both configured verbs; 30/60-second OS dismissal with the app suspended/terminated;
-repeated taps; swipe dismissal; disabled Live Activities; locked/unlocked and
-privacy-redacted states; Always-On; 2x/3x QR scanning; and the actual workplace
-reader using a user-provided test code. Keep actual QR payloads out of logs,
-screenshots, source control and test fixtures.
+Before release on an iPhone, check installed rectangular widget migration, the
+new circular widget, cold/warm launches, exact tapped configuration with multiple
+widgets, repeated taps, invalid/empty input, close/reopen, Home/app switcher,
+background/foreground, screen lock/unlock, Face ID/passcode, split view/rotation,
+large text, app-switcher privacy and real scanner decoding. Confirm auto-lock
+resumes after leaving QR and after closing. Use only synthetic test payloads in
+recorded evidence.
 
 ## Apple references
 
-- [LiveActivityIntent](https://developer.apple.com/documentation/appintents/liveactivityintent)
-- [WWDC24: Extend your app's controls across the system, 3:13](https://developer.apple.com/videos/play/wwdc2024/10157/?time=193)
-- [Adding interactivity](https://developer.apple.com/documentation/widgetkit/adding-interactivity-to-widgets-and-live-activities)
-- [Displaying Live Activities](https://developer.apple.com/documentation/activitykit/displaying-live-data-with-live-activities)
-- [Ending an activity](https://developer.apple.com/documentation/activitykit/activity/end(_:dismissalpolicy:))
-- [OS dismissal policy](https://developer.apple.com/documentation/activitykit/activityuidismissalpolicy/after(_:))
-- [Configurable widgets](https://developer.apple.com/documentation/widgetkit/making-a-configurable-widget)
-- [Vision raw barcode bytes](https://developer.apple.com/documentation/vision/vnbarcodeobservation/payloaddata)
+- [Widget configuration delivery](https://developer.apple.com/documentation/widgetkit/making-a-configurable-widget)
+- [Default widget tap and NSUserActivity](https://developer.apple.com/documentation/widgetkit/linking-to-specific-app-scenes-from-your-widget-or-live-activity)
+- [Configuration extraction](https://developer.apple.com/documentation/foundation/nsuseractivity/widgetconfigurationintent(of:))
+- [SwiftUI scene delegate injection](https://developer.apple.com/documentation/swiftui/uiapplicationdelegateadaptor)
+- [Idle timer scope](https://developer.apple.com/documentation/uikit/uiapplication/isidletimerdisabled)
+- [Widget interaction and authentication](https://developer.apple.com/documentation/widgetkit/adding-interactivity-to-widgets-and-live-activities)
+- [Legacy ended-card dismissal](https://developer.apple.com/documentation/activitykit/activityuidismissalpolicy/after(_:))

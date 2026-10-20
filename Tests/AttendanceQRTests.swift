@@ -130,6 +130,38 @@ final class AttendanceQRTests: XCTestCase {
         }
     }
 
+    func testFullscreenRenderingPreservesBytesQuietZoneAndPixelAlignment() throws {
+        for scale in [CGFloat(2), CGFloat(3)] {
+            for canvas in [CGFloat(288), CGFloat(361), CGFloat(398)] {
+                let payload = " e\u{301}・共通デモ \n"
+                let code = try AttendanceQRRenderer.render(payload: payload, displayScale: scale,
+                                                          canvasSide: canvas)
+                XCTAssertLessThanOrEqual(code.pointSide, canvas)
+                XCTAssertGreaterThan(code.pointSide, 260)
+                XCTAssertEqual(code.leadingInset * scale, floor(code.leadingInset * scale))
+                let bytes = try XCTUnwrap(code.image.dataProvider?.data) as Data
+                let side = code.image.width
+                let quiet = code.quietZonePixels
+                XCTAssertEqual(side, (code.symbolModules + 8) * code.pixelsPerModule)
+                XCTAssertEqual(Set(bytes), Set([UInt8(0), UInt8(255)]))
+                for y in 0..<side {
+                    for x in 0..<side where x < quiet || y < quiet || x >= side - quiet || y >= side - quiet {
+                        XCTAssertEqual(bytes[y * side + x], 255)
+                    }
+                }
+                let request = VNDetectBarcodesRequest()
+                request.revision = VNDetectBarcodesRequestRevision4
+                request.symbologies = [.qr]
+                try VNImageRequestHandler(cgImage: code.image, options: [:]).perform([request])
+                XCTAssertEqual(try XCTUnwrap(request.results?.first?.payloadData), Data(payload.utf8))
+            }
+        }
+        for canvas in [CGFloat.zero, 135, .infinity, .nan, 1025] {
+            XCTAssertThrowsError(try AttendanceQRRenderer.render(payload: "demo", displayScale: 3,
+                                                                canvasSide: canvas))
+        }
+    }
+
     func testInvalidScaleAndOversizedPayloadFailBeforeRendering() {
         for scale in [CGFloat.zero, -1, .infinity, .nan, 5] {
             XCTAssertThrowsError(try AttendanceQRRenderer.render(payload: "demo", displayScale: scale)) {
