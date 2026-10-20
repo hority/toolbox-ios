@@ -8,7 +8,7 @@ The app sends unsigned binary Apple plist data to `https://sign.shortcuty.app/ap
 
 Official service documentation: https://github.com/Shortcuty/Signing-Server-API-Documentation
 
-The response must decode as a signed AEA archive and contain the same workflow definition that was submitted. Container validation does not establish Apple issuer trust; the Apple Shortcuts app performs the final trust and import checks. The app never executes shortcut actions.
+The response must decode as a signed AEA archive and contain the same workflow definition that was submitted, apart from the tightly bounded serialization bookkeeping described below. Container validation does not establish Apple issuer trust; the Apple Shortcuts app performs the final trust and import checks. The app never executes shortcut actions.
 
 ## Verification
 
@@ -29,6 +29,15 @@ The signing error `AppleArchive.ArchiveError 0` occurs during local AEA/inner ar
 
 A single synthetic alert-only request returned HTTP 200 and 21,652 bytes. An independent Linux decoder recovered an AA01 payload, so the direct-plist hypothesis was rejected. The actual AppleArchive implementation is covered by `ci/verify-shortcut-fixture.sh` in the existing manual TestFlight job, before building/uploading: reproduce the old rewind failure, decode through the production implementation, reject tampering/truncation and check exact workflow equality. This check does not use the network, simulator, private keys or user content.
 
-The synthetic signer response changed workflow metadata, including its client-version value and several added empty/default fields. Exact full-workflow comparison is retained. Such a response will correctly stop with a content-mismatch message even after decoding succeeds; this change does not silently approve service alterations. App errors now distinguish receiving the signed file from failing local verification and identify the verification stage without showing file contents.
+The synthetic signer response changed workflow metadata, including its client-version value and several added empty/default fields. The subsequent correction compares all semantic and unknown fields exactly, permitting only the five constrained bookkeeping differences below. App errors now distinguish receiving the signed file from failing local verification and identify the verification stage without showing file contents.
 
 The ChatGPT connection button uses explicit light/dark foreground/background pairs, including pressed and disabled states. The manual macOS check verifies all eight grayscale contrast combinations at >=4.5:1; visual appearance on a physical iPhone is still a separate check.
+
+
+### Bounded signer metadata compatibility
+
+Two independently generated synthetic fixtures (an alert and a photo-filter/preview workflow) returned exactly these differences, with identical actions/parameters: producer `WFWorkflowClientVersion` changed from `3036.0.4.2` to `5037.0.17`; absent `WFQuickActionSurfaces` and `WFWorkflowOutputContentItemClasses` became empty arrays; absent `WFWorkflowHasOutputFallback` and `WFWorkflowHasShortcutInputVariables` became Boolean false. This is observed service serialization behavior, not a general claim that arbitrary metadata changes are harmless.
+
+Comparison permits only a producer-version change when both values are bounded, ASCII dotted numeric version strings, and only those four absent-to-empty/false additions. Numeric zero is not accepted as Boolean false. Existing populated values cannot change or disappear. All actions, parameters, variables, inputs, import questions, minimum-client requirements, attachments and unknown fields remain subject to full equality. The app does not rewrite the draft or request, execute anything, or skip outer signature verification. Any other change still blocks export.
+
+The manual macOS regression gate validates both real synthetic AEA fixtures through the production code, and rejects action/parameter, minimum-version, input-class, unknown-field, nondefault, numeric-zero and populated-default mutations. No additional live signing requests run in CI. The intermediate build 6 fixed the archive boundary and contrast; the subsequent release incorporates this bounded metadata correction.

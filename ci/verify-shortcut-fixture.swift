@@ -40,10 +40,50 @@ import System
         let actual = try ShortcutImport.unpackSignedArchive(signed)
         guard NSDictionary(dictionary: expected).isEqual(to: actual) else { fatalError("Decoded fixture mismatch") }
         try ShortcutSigner.validateSignedData(signed, source: ShortcutFormat.json(expected))
-        do {
-            try ShortcutSigner.validateSignedData(signed, source: ShortcutFormat.json(original))
-            fatalError("Signer metadata changes must not bypass exact comparison")
-        } catch is ShortcutError { }
+        try ShortcutSigner.validateSignedData(signed, source: ShortcutFormat.json(original))
+        // The narrow default/version equivalence must not accept semantic changes.
+        let changedValues: [(String, Any)] = [
+            ("WFWorkflowActions", []), ("WFWorkflowMinimumClientVersion", 999),
+            ("WFWorkflowInputContentItemClasses", ["WFImageContentItem"]),
+            ("WFWorkflowHasShortcutInputVariables", true), ("WFWorkflowHasOutputFallback", true),
+            ("WFQuickActionSurfaces", ["Finder"]), ("WFWorkflowOutputContentItemClasses", ["WFImageContentItem"]),
+            ("WFWorkflowClientVersion", "invalid"), ("UnknownField", "added")
+        ]
+        for (field, value) in changedValues {
+            var changed = expected; changed[field] = value
+            do { try ShortcutSigner.validateWorkflow(changed, source: ShortcutFormat.json(original)); fatalError("Changed field accepted: \(field)") }
+            catch is ShortcutError { }
+        }
+        for key in ["WFWorkflowHasShortcutInputVariables", "WFWorkflowHasOutputFallback"] {
+            var changed = expected; changed[key] = 0 // Numeric zero is not Boolean false.
+            do { try ShortcutSigner.validateWorkflow(changed, source: ShortcutFormat.json(original)); fatalError("Numeric false accepted") }
+            catch is ShortcutError { }
+        }
+        var actionTypeMutation = expected
+        var alertActions = expected["WFWorkflowActions"] as! [[String: Any]]
+        var alertParameters = alertActions[0]["WFWorkflowActionParameters"] as! [String: Any]
+        alertParameters["WFAlertActionCancelButtonShown"] = 0
+        alertActions[0]["WFWorkflowActionParameters"] = alertParameters
+        actionTypeMutation["WFWorkflowActions"] = alertActions
+        do { try ShortcutSigner.validateWorkflow(actionTypeMutation, source: ShortcutFormat.json(original)); fatalError("Action Boolean-to-number mutation accepted") }
+        catch is ShortcutError { }
+        let photoSigned = try Data(contentsOf: root.appending(path: "synthetic-photo-signed.shortcut"))
+        let photoOriginal = try PropertyListSerialization.propertyList(from: Data(contentsOf: root.appending(path: "synthetic-photo-input.plist")), options: [], format: nil) as! [String: Any]
+        let photoReturned = try ShortcutImport.unpackSignedArchive(photoSigned)
+        try ShortcutSigner.validateSignedData(photoSigned, source: ShortcutFormat.json(photoOriginal))
+        guard NSArray(array: photoOriginal["WFWorkflowActions"] as! [Any]).isEqual(to: photoReturned["WFWorkflowActions"] as! [Any]) else { fatalError("Photo actions changed") }
+        var changedPhoto = photoReturned
+        var photoActions = photoReturned["WFWorkflowActions"] as! [[String: Any]]
+        photoActions[0]["WFWorkflowActionParameters"] = ["WFContentItemLimitNumber": 999]
+        changedPhoto["WFWorkflowActions"] = photoActions
+        do { try ShortcutSigner.validateWorkflow(changedPhoto, source: ShortcutFormat.json(photoOriginal)); fatalError("Photo parameter mutation accepted") }
+        catch is ShortcutError { }
+        let explicitDefaults: [(String, Any)] = [("WFWorkflowHasOutputFallback", true), ("WFWorkflowHasShortcutInputVariables", true), ("WFQuickActionSurfaces", ["Finder"]), ("WFWorkflowOutputContentItemClasses", ["WFImageContentItem"])]
+        for (key, explicitValue) in explicitDefaults {
+            var populated = original; populated[key] = explicitValue
+            do { try ShortcutSigner.validateWorkflow(expected, source: ShortcutFormat.json(populated)); fatalError("Populated default changed") }
+            catch is ShortcutError { }
+        }
         for candidate in [Data(signed.prefix(signed.count / 2)), corrupted(signed)] {
             do { _ = try ShortcutImport.unpackSignedArchive(candidate); fatalError("Invalid archive accepted") }
             catch is ShortcutError { }
@@ -54,7 +94,7 @@ import System
             let a = lum(p.foreground), b = lum(p.background)
             guard (max(a, b) + 0.05) / (min(a, b) + 0.05) >= 4.5 else { fatalError("Button contrast failed") }
         } } }
-        print("Synthetic archive decode, corruption rejection, full workflow comparison and all eight button palette states passed")
+        print("Synthetic alert/photo archives, corruption rejection, bounded metadata equivalence, semantic mutation rejection and all eight button palette states passed")
     }
     static func corrupted(_ value: Data) -> Data {
         var result = value; result[result.count / 2] ^= 1; return result

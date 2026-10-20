@@ -1,4 +1,5 @@
 import Foundation
+import CoreFoundation
 
 struct ShortcutSigningResponse: Sendable {
     let data: Data
@@ -86,10 +87,59 @@ enum ShortcutSigner {
 
     static func validateWorkflow(_ returned: [String: Any], source: String) throws {
         let original = try ShortcutFormat.workflow(source)
-        // Check the entire property list, not only the action count or archive prefix.
-        guard NSDictionary(dictionary: original).isEqual(to: returned) else {
+        // Preserve exact comparison of every semantic field. Only the observed
+        // producer-version stamp and absent-to-default bookkeeping are equivalent.
+        let comparable = normalizedSigningMetadata(returned, original: original)
+        guard equalWorkflowValues(original, comparable) else {
             throw ShortcutError.message("署名サービスの返した内容が送信したショートカットと異なります。安全のため書き出しませんでした。")
         }
+    }
+
+    // NSDictionary treats Boolean false and numeric zero as equal. Workflow
+    // parameters must retain that distinction, including inside nested actions.
+    static func equalWorkflowValues(_ left: Any, _ right: Any) -> Bool {
+        if let a = left as? [String: Any] {
+            guard let b = right as? [String: Any], a.count == b.count else { return false }
+            return a.allSatisfy { key, value in b[key].map { equalWorkflowValues(value, $0) } ?? false }
+        }
+        if let a = left as? [Any] {
+            guard let b = right as? [Any], a.count == b.count else { return false }
+            return zip(a, b).allSatisfy { equalWorkflowValues($0.0, $0.1) }
+        }
+        if let a = left as? NSNumber, let b = right as? NSNumber {
+            guard (CFGetTypeID(a) == CFBooleanGetTypeID()) == (CFGetTypeID(b) == CFBooleanGetTypeID()) else { return false }
+            return a.isEqual(to: b)
+        }
+        guard let a = left as? NSObject, let b = right as? NSObject else { return false }
+        return a.isEqual(b)
+    }
+
+    static func normalizedSigningMetadata(_ returned: [String: Any], original: [String: Any]) -> [String: Any] {
+        var comparable = returned
+        let version = "WFWorkflowClientVersion"
+        func validVersion(_ value: Any?) -> Bool {
+            guard let text = value as? String, text.utf8.count <= 64 else { return false }
+            let parts = text.split(separator: ".", omittingEmptySubsequences: false)
+            return (2...6).contains(parts.count) && parts.allSatisfy { part in
+                !part.isEmpty && part.utf8.count <= 10 && part.utf8.allSatisfy { (48...57).contains($0) }
+            }
+        }
+        // This is the producing Shortcuts version, not either minimum-client key.
+        if validVersion(original[version]), validVersion(returned[version]) {
+            comparable[version] = original[version]
+        }
+        for key in ["WFQuickActionSurfaces", "WFWorkflowOutputContentItemClasses"] {
+            if original[key] == nil, let value = returned[key] as? [Any], value.isEmpty {
+                comparable.removeValue(forKey: key)
+            }
+        }
+        for key in ["WFWorkflowHasOutputFallback", "WFWorkflowHasShortcutInputVariables"] {
+            if original[key] == nil, let value = returned[key] as? NSNumber,
+               CFGetTypeID(value) == CFBooleanGetTypeID(), !value.boolValue {
+                comparable.removeValue(forKey: key)
+            }
+        }
+        return comparable
     }
 
     static func fetch(_ request: URLRequest) async throws -> ShortcutSigningResponse {

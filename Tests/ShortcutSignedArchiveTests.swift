@@ -16,12 +16,19 @@ final class ShortcutSignedArchiveTests: XCTestCase {
         XCTAssertNoThrow(try ShortcutSigner.validateSignedData(signed, source: ShortcutFormat.json(expected)))
     }
 
-    func testChangedMetadataStillFailsExactWorkflowValidation() throws {
+    func testObservedAbsentDefaultsAndProducerVersionAreAccepted() throws {
         let original = try XCTUnwrap(PropertyListSerialization.propertyList(from: fixture("synthetic-input.plist"), options: [], format: nil) as? [String: Any])
-        XCTAssertThrowsError(try ShortcutSigner.validateSignedData(fixture("synthetic-signed.shortcut"), source: ShortcutFormat.json(original))) { error in
-            XCTAssertTrue(error.localizedDescription.contains("端末内の検証"))
-            XCTAssertTrue(error.localizedDescription.contains("異なります"))
-        }
+        XCTAssertNoThrow(try ShortcutSigner.validateSignedData(fixture("synthetic-signed.shortcut"), source: ShortcutFormat.json(original)))
+    }
+
+    func testSyntheticPhotoWorkflowPreservesActionsAndParameters() throws {
+        let original = try XCTUnwrap(PropertyListSerialization.propertyList(from: fixture("synthetic-photo-input.plist"), options: [], format: nil) as? [String: Any])
+        let signed = try fixture("synthetic-photo-signed.shortcut")
+        let returned = try ShortcutImport.unpackSignedArchive(signed)
+        XCTAssertNoThrow(try ShortcutSigner.validateSignedData(signed, source: ShortcutFormat.json(original)))
+        let actions = try XCTUnwrap(returned["WFWorkflowActions"] as? [[String: Any]])
+        XCTAssertEqual(actions.map { $0["WFWorkflowActionIdentifier"] as? String }, ["is.workflow.actions.filter.photos", "is.workflow.actions.previewdocument"])
+        XCTAssertTrue(NSArray(array: actions).isEqual(to: original["WFWorkflowActions"] as! [Any]))
     }
 
     func testCorruptedAndTruncatedArchivesFailWithSafeDiagnostics() throws {

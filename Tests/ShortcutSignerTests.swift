@@ -86,3 +86,45 @@ final class ShortcutSignerTests: XCTestCase {
         catch { XCTAssertTrue(error is CancellationError) }
     }
 }
+
+extension ShortcutSignerTests {
+    func testBookkeepingNeverHidesExistingValuesOrSemanticChanges() throws {
+        let original = try ShortcutFormat.workflow(ShortcutDraft.example.source)
+        var accepted = original
+        accepted["WFWorkflowClientVersion"] = "5037.0.17"
+        accepted["WFQuickActionSurfaces"] = []
+        accepted["WFWorkflowOutputContentItemClasses"] = []
+        accepted["WFWorkflowHasShortcutInputVariables"] = false
+        XCTAssertNoThrow(try ShortcutSigner.validateWorkflow(accepted, source: ShortcutDraft.example.source))
+        let mutations: [(String, Any)] = [
+            ("WFWorkflowActions", []), ("WFWorkflowMinimumClientVersion", 999),
+            ("WFWorkflowMinimumClientVersionString", "999"),
+            ("WFWorkflowInputContentItemClasses", ["WFImageContentItem"]),
+            ("WFWorkflowHasOutputFallback", true), ("WFWorkflowHasShortcutInputVariables", true),
+            ("WFQuickActionSurfaces", ["Finder"]), ("WFWorkflowOutputContentItemClasses", ["WFImageContentItem"]),
+            ("WFWorkflowHasShortcutInputVariables", 0), ("WFWorkflowHasOutputFallback", 0), ("UnexpectedServiceField", false)
+        ]
+        for (key, value) in mutations {
+            var bad = accepted; bad[key] = value
+            XCTAssertThrowsError(try ShortcutSigner.validateWorkflow(bad, source: ShortcutDraft.example.source), key)
+        }
+        var changedAction = accepted
+        changedAction["WFWorkflowActions"] = [["WFWorkflowActionIdentifier": "is.workflow.actions.alert", "WFWorkflowActionParameters": ["WFAlertActionMessage": "changed"]]]
+        XCTAssertThrowsError(try ShortcutSigner.validateWorkflow(changedAction, source: ShortcutDraft.example.source))
+        var booleanMutation = accepted
+        var actions = original["WFWorkflowActions"] as! [[String: Any]]
+        var parameters = actions[0]["WFWorkflowActionParameters"] as! [String: Any]
+        parameters["WFAlertActionCancelButtonShown"] = 0
+        actions[0]["WFWorkflowActionParameters"] = parameters
+        booleanMutation["WFWorkflowActions"] = actions
+        XCTAssertThrowsError(try ShortcutSigner.validateWorkflow(booleanMutation, source: ShortcutDraft.example.source))
+        for value in ["", "5037", "5037..17", "5037.0.17/evil", String(repeating: "1", count: 65) + ".0"] {
+            var bad = accepted; bad["WFWorkflowClientVersion"] = value
+            XCTAssertThrowsError(try ShortcutSigner.validateWorkflow(bad, source: ShortcutDraft.example.source))
+        }
+        var missing = accepted; missing.removeValue(forKey: "WFWorkflowHasOutputFallback")
+        XCTAssertThrowsError(try ShortcutSigner.validateWorkflow(missing, source: ShortcutDraft.example.source))
+        var existing = original; existing["WFQuickActionSurfaces"] = ["Finder"]
+        XCTAssertThrowsError(try ShortcutSigner.validateWorkflow(accepted, source: ShortcutFormat.json(existing)))
+    }
+}
