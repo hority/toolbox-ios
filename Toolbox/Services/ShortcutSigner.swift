@@ -91,7 +91,7 @@ enum ShortcutSigner {
         // producer-version stamp and absent-to-default bookkeeping are equivalent.
         let comparable = normalizedSigningMetadata(returned, original: original)
         guard equalWorkflowValues(original, comparable) else {
-            throw ShortcutError.message("署名サービスの返した内容が送信したショートカットと異なります。安全のため書き出しませんでした。")
+            throw ShortcutError.message("署名用の既定値・作成元バージョン以外にも、返された内容が送信内容と異なります。サービス側の形式変換などが原因の場合もありますが、同一性を確認できないため書き出しませんでした。")
         }
     }
 
