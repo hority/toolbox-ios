@@ -61,26 +61,14 @@ enum ShortcutAI {
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
             throw requestError((response as? HTTPURLResponse)?.statusCode ?? 0)
         }
-        guard http.mimeType == "text/event-stream" else { throw ShortcutError.message("AIの応答形式が不正です。") }
-        var stream = ShortcutResponseStream()
-        var line = Data()
-        var received = 0
-        // Parse bytes explicitly: blank lines delimit SSE frames and must not be skipped.
+        var decoder = ShortcutResponseDecoder(status: http.statusCode,
+                                              contentType: http.value(forHTTPHeaderField: "Content-Type"))
         for try await byte in bytes {
             try account.assertCurrent(epoch)
-            received += 1
-            guard received <= 8_000_000, line.count <= 4_000_000 else { throw ShortcutError.message("AIの応答が大きすぎます。") }
-            if byte == 10 {
-                if line.last == 13 { line.removeLast() }
-                guard let value = String(data: line, encoding: .utf8) else { throw ShortcutError.message("AIの応答を読み込めません。") }
-                try stream.line(value)
-                if value.isEmpty { progress(stream.text.count) }
-                line.removeAll(keepingCapacity: true)
-            } else { line.append(byte) }
+            if try decoder.append(byte) { progress(decoder.textCount) }
         }
         try account.assertCurrent(epoch)
-        guard line.isEmpty else { throw ShortcutError.message("AIの応答が途中で終了しました。") }
-        return try proposal(stream.finish())
+        return try proposal(decoder.finish())
     }
 
     static func proposal(_ text: String) throws -> ShortcutDraft {

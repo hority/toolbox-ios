@@ -16,6 +16,6 @@ platform :ios do
     profile = "match AppStore #{BUNDLE_ID}"
     widget_profile = "match AppStore #{WIDGET_BUNDLE_ID}"
     ipa = build_app(project: 'Toolbox.xcodeproj', scheme: 'Toolbox', configuration: 'Release', clean: true, output_directory: 'build', output_name: 'Toolbox.ipa', archive_path: 'build/Toolbox.xcarchive', xcargs: "CURRENT_PROJECT_VERSION=#{number} DEVELOPMENT_TEAM=#{team} CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY='Apple Distribution' TOOLBOX_APP_PROFILE='#{profile}' TOOLBOX_WIDGET_PROFILE='#{widget_profile}'", export_options: {method: 'app-store-connect', signingStyle: 'manual', teamID: team, provisioningProfiles: {BUNDLE_ID => profile, WIDGET_BUNDLE_ID => widget_profile}})
-    upload_to_testflight(api_key: key, ipa: ipa, app_identifier: BUNDLE_ID, skip_waiting_for_build_processing: false, wait_processing_interval: 20, wait_processing_timeout_duration: 1200, changelog: 'ChatGPTログインとショートカットのAI下書き生成・編集確認を追加。QRウィジェットから全画面QRを表示し、表示中の自動スリープを抑止。AI送信とShortcuty署名は個別に確認します。', distribute_external: false, submit_beta_review: false)
+    upload_to_testflight(api_key: key, ipa: ipa, app_identifier: BUNDLE_ID, skip_waiting_for_build_processing: false, wait_processing_interval: 20, wait_processing_timeout_duration: 1200, changelog: 'AI生成の応答形式判定を改善。完了を検証したストリームまたはResponses JSONだけを受け付け、失敗時は内容を含まないHTTP状態・形式情報を表示します。', distribute_external: false, submit_beta_review: false)
   end
 end
