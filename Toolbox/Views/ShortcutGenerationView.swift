@@ -37,7 +37,7 @@ struct ShortcutGenerationView: View {
                     Text(account.connected ? "接続済み" : "未接続").foregroundStyle(.secondary)
                     Button("Continue with ChatGPT") {
                         run(.login) { try await account.signIn(); try await account.refreshModels() }
-                    }.buttonStyle(.borderedProminent).tint(.primary).disabled(busy)
+                    }.buttonStyle(ChatGPTConnectionButtonStyle()).disabled(busy)
                     if !account.records.registrations.isEmpty {
                         Button("別のアカウントを追加") {
                             run(.login) { try await account.signIn(newAccount: true); try await account.refreshModels() }

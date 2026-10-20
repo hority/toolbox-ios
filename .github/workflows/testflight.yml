@@ -38,6 +38,8 @@ jobs:
           MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
       - name: Generate project
         run: xcodegen generate
+      - name: Verify synthetic shortcut archive and button contrast
+        run: bash ci/verify-shortcut-fixture.sh
       - name: Build and upload
         run: bundle exec fastlane ios beta
         env:

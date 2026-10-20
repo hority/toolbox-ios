@@ -75,8 +75,13 @@ enum ShortcutSigner {
         guard data.count <= maximumResponseSize, data.starts(with: Data("AEA1".utf8)) else {
             throw ShortcutError.message("署名済みショートカットを受信できませんでした。")
         }
-        let returned = try ShortcutImport.unpackSignedArchive(data)
-        try validateWorkflow(returned, source: source)
+        do {
+            let returned = try ShortcutImport.unpackSignedArchive(data)
+            try validateWorkflow(returned, source: source)
+        } catch is CancellationError { throw CancellationError() }
+        catch let error as ShortcutError {
+            throw ShortcutError.message("署名サービスからファイルを受信しましたが、端末内の検証で停止しました。\n\(error.localizedDescription)")
+        }
     }
 
     static func validateWorkflow(_ returned: [String: Any], source: String) throws {

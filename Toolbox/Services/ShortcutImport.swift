@@ -50,6 +50,17 @@ enum ShortcutImport {
     // The included certificate supplies the integrity-checking key, not a trust decision.
     // Apple Shortcuts is responsible for final certificate trust and import validation.
     static func unpackSignedArchive(_ data: Data) throws -> [String: Any] {
+        var stage = "アーカイブを開く処理"
+        do { return try unpackSignedArchive(data, stage: &stage) }
+        catch is CancellationError { throw CancellationError() }
+        catch let error as ShortcutError { throw error }
+        catch {
+            // Do not expose provider bytes, certificate contents, or filesystem paths.
+            throw ShortcutError.message("署名ファイルの\(stage)に失敗しました。ファイルの破損または未対応の形式が考えられます。書き出しは行っていません。")
+        }
+    }
+
+    private static func unpackSignedArchive(_ data: Data, stage: inout String) throws -> [String: Any] {
         guard data.count <= maximumFileSize, data.starts(with: Data("AEA1".utf8)) else {
             throw ShortcutError.message("署名済みショートカットの形式ではありません。")
         }
@@ -73,6 +84,7 @@ enum ShortcutImport {
               let representation = SecKeyCopyExternalRepresentation(key, nil) as Data? else {
             throw ShortcutError.message("この署名ファイルには対応していません。『誰でも』で共有したショートカットを選んでください。")
         }
+        stage = "署名鍵・属性の検証"
         try context.setSigningPublicKey(P256.Signing.PublicKey(x963Representation: representation))
         guard context.decryptAttributes() else {
             throw ShortcutError.message("署名アーカイブの属性を検証できませんでした。")
@@ -82,7 +94,10 @@ enum ShortcutImport {
               context.compressionBlockSize > 0, context.compressionBlockSize <= maximumFileSize else {
             throw ShortcutError.message("展開後のアーカイブが大きすぎます。")
         }
-        _ = try input.seek(toOffset: 0, relativeTo: .start)
+        // ArchiveEncryptionContext(from:) consumes the AEA prologue. Continue from
+        // that position, as in Apple's decrypt sample; rewinding feeds the prologue
+        // to a decoder expecting the encrypted/compressed payload.
+        stage = "署名付きデータの展開"
         guard let decrypted = ArchiveByteStream.decryptionStream(readingFrom: input, encryptionContext: context, threadCount: 1) else {
             throw ShortcutError.message("署名を検証・展開できませんでした。連絡先限定のファイルは『誰でも』で共有し直してください。")
         }
@@ -96,6 +111,7 @@ enum ShortcutImport {
         var entries = 0
         var totalBytes = 0
         var result: [String: Any]?
+        stage = "内部アーカイブの読み取り"
         while let header = try archive.readHeader() {
             try Task.checkCancellation()
             entries += 1
@@ -115,6 +131,7 @@ enum ShortcutImport {
             }
         }
         // Consume the whole archive, and propagate close errors before accepting it.
+        stage = "アーカイブ末尾の検証"
         try archive.close(); archiveOpen = false
         try decrypted.close(); decryptedOpen = false
         try input.close(); inputOpen = false
