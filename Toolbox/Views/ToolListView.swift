@@ -73,6 +73,8 @@ struct ToolListView: View {
             ShortcutSigningView()
         case .attendanceQR:
             AttendanceQRHelpView()
+        case .brushingCoach:
+            BrushingCoachView()
         }
     }
 }

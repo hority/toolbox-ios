@@ -19,3 +19,7 @@ These notes describe the implemented app behavior, not a completed App Store pri
 QR text and labels are entered in the system widget configuration on the device. The widget’s default launch delivers its configuration on device through WidgetKit’s NSUserActivity to open the app’s full-screen QR after normal system authentication. The legacy App Intent / Live Activity path is retained. The screen prevents idle sleep only while visible and active. There is no QR server, account, analytics, or automatic attendance submission. No App Group is used. iOS manages widget configuration and Live Activity state; this is not a promise that OS-managed configuration is excluded from device backups.
 
 A displayed attendance QR can be read by nearby people or cameras, including on the Lock Screen. Users should follow their employer's rules and should not store passwords or unrelated secrets in QR configuration. iOS controls authentication, visibility and removal timing. Removing a widget and dismissing its card removes those visible instances; the app does not provide remote revocation of fixed QR contents.
+
+## Brushing coach
+
+The brushing coach uses the front camera only while its screen is open and the app is active. Frames are analyzed on device with Apple's Vision framework to place the bunny/panda effects and to measure motion around the mouth, then discarded. No photo, video, face data or score is saved or transmitted. The score is a motion-based guide for children and does not assess plaque or oral health.

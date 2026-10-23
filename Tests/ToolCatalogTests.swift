@@ -3,7 +3,7 @@ import XCTest
 
 final class ToolCatalogTests: XCTestCase {
     func testEmptySearchShowsAllTools() {
-        XCTAssertEqual(ToolCatalog.tools(matching: "", filter: .all).map(\.id), [.textCounter, .shortcutSigning, .attendanceQR])
+        XCTAssertEqual(ToolCatalog.tools(matching: "", filter: .all).map(\.id), [.textCounter, .shortcutSigning, .attendanceQR, .brushingCoach])
     }
 
     func testSearchIgnoresOuterWhitespaceAndCase() {
@@ -19,7 +19,7 @@ final class ToolCatalogTests: XCTestCase {
     }
 
     func testAvailableFilterIncludesImplementedTools() {
-        XCTAssertEqual(ToolCatalog.tools(matching: "", filter: .available).map(\.id), [.textCounter, .shortcutSigning, .attendanceQR])
+        XCTAssertEqual(ToolCatalog.tools(matching: "", filter: .available).map(\.id), [.textCounter, .shortcutSigning, .attendanceQR, .brushingCoach])
     }
 
     func testPlannedFilterIsEmpty() {

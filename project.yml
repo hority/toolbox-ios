@@ -31,6 +31,7 @@ targets:
         PRODUCT_NAME: Toolbox
         PROVISIONING_PROFILE_SPECIFIER: "$(TOOLBOX_APP_PROFILE)"
         INFOPLIST_KEY_NSSupportsLiveActivities: YES
+        INFOPLIST_KEY_NSCameraUsageDescription: はみがきコーチで顔の位置と口もとの動きを端末内で読み取り、エフェクトと採点に使います。映像は保存・送信しません。
         INFOPLIST_KEY_CFBundleDisplayName: 工具箱
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.utilities
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
