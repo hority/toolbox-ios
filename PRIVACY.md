@@ -22,4 +22,4 @@ A displayed attendance QR can be read by nearby people or cameras, including on 
 
 ## Brushing coach
 
-The brushing coach uses the front camera only while its screen is open and the app is active. Frames are analyzed on device with Apple's Vision framework to place the bunny/panda effects and to measure motion around the mouth, then discarded. No photo, video, face data or score is saved or transmitted. The score is a motion-based guide for children and does not assess plaque or oral health.
+The brushing coach uses the front camera only while its screen is open and the app is active. Frames are analyzed on device with Apple's Vision framework to place the bunny/panda effects and to measure motion around the mouth, then discarded. No photo, video or face data is saved or transmitted. The stamp card keeps only each completed session's date, star count and chosen mask in this app's on-device settings; it is never transmitted. The score is a motion-based guide for children and does not assess plaque or oral health.
