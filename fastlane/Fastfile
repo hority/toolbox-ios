@@ -16,6 +16,6 @@ platform :ios do
     profile = "match AppStore #{BUNDLE_ID}"
     widget_profile = "match AppStore #{WIDGET_BUNDLE_ID}"
     ipa = build_app(project: 'Toolbox.xcodeproj', scheme: 'Toolbox', configuration: 'Release', clean: true, output_directory: 'build', output_name: 'Toolbox.ipa', archive_path: 'build/Toolbox.xcarchive', xcargs: "CURRENT_PROJECT_VERSION=#{number} DEVELOPMENT_TEAM=#{team} CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY='Apple Distribution' TOOLBOX_APP_PROFILE='#{profile}' TOOLBOX_WIDGET_PROFILE='#{widget_profile}'", export_options: {method: 'app-store-connect', signingStyle: 'manual', teamID: team, provisioningProfiles: {BUNDLE_ID => profile, WIDGET_BUNDLE_ID => widget_profile}})
-    upload_to_testflight(api_key: key, ipa: ipa, app_identifier: BUNDLE_ID, skip_waiting_for_build_processing: false, wait_processing_interval: 20, wait_processing_timeout_duration: 1200, changelog: '署名アーカイブの展開と、署名時の限定的な既定メタデータ追加への互換性を修正。アクション・入力値などの改変検証は維持。ChatGPT接続ボタンのダークモード表示も改善。', distribute_external: false, submit_beta_review: false)
+    upload_to_testflight(api_key: key, ipa: ipa, app_identifier: BUNDLE_ID, skip_waiting_for_build_processing: false, wait_processing_interval: 20, wait_processing_timeout_duration: 1200, changelog: '子ども向け「はみがきコーチ」を追加。インカメラで2分間・6か所の歯みがきを案内し、うさぎ/パンダのエフェクトを表示。口もとの動きで続けて磨けたかを星で評価（磨き残しの判定ではありません）。映像は端末内で処理し保存・送信しません。確認: エフェクトの位置、ゴシゴシ判定の感度、手で口が隠れたときの追従。', distribute_external: false, submit_beta_review: false)
   end
 end
