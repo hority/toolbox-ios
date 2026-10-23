@@ -2,20 +2,6 @@ import AVFoundation
 import SwiftUI
 import UIKit
 
-enum FaceEffect: String, CaseIterable, Identifiable {
-    case none, bunny, panda
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .none: "なし"
-        case .bunny: "うさぎ"
-        case .panda: "パンダ"
-        }
-    }
-}
-
 @MainActor
 @Observable
 final class BrushingCameraModel {
@@ -118,11 +104,25 @@ struct BrushingCoachView: View {
     private enum Phase { case ready, brushing, finished }
 
     @Environment(\.scenePhase) private var scenePhase
+    @AppStorage("brushingMask") private var mask = BrushingMask.bunny
+    @AppStorage("brushingSoundEnabled") private var soundEnabled = true
     @State private var camera = BrushingCameraModel()
-    @State private var effect = FaceEffect.bunny
+    @State private var stampCard = BrushingStampCard()
+    @State private var sound = BrushingSound()
+    @State private var sparkles = SparkleField()
     @State private var phase = Phase.ready
     @State private var session = BrushingSession()
+    @State private var overlaySize = CGSize.zero
+    @State private var celebrateDate: Date?
+    @State private var germPops = 0
+    @State private var earnedStamp = false
+    @State private var unlockedMasks: [BrushingMask] = []
+    @State private var showingStampCard = false
     @State private var idleOwner = UUID()
+
+    private var screenFace: ScreenFace? {
+        camera.face.map { ScreenFace($0, imageSize: camera.imageSize, viewSize: overlaySize) }
+    }
 
     var body: some View {
         ZStack {
@@ -138,24 +138,49 @@ struct BrushingCoachView: View {
                 cameraView
             }
         }
+        .fontDesign(.rounded)
         .navigationTitle("はみがきコーチ")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.visible, for: .navigationBar)
-        .task { await camera.start() }
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    soundEnabled.toggle()
+                } label: {
+                    Image(systemName: soundEnabled ? "speaker.wave.2.fill" : "speaker.slash.fill")
+                }
+                .accessibilityLabel(soundEnabled ? "おとを けす" : "おとを だす")
+            }
+        }
+        .sheet(isPresented: $showingStampCard) {
+            BrushingStampCardView(card: stampCard)
+        }
+        .task {
+            sound.isEnabled = soundEnabled
+            if !stampCard.isUnlocked(mask) { mask = .bunny }
+            await camera.start()
+        }
         .onDisappear {
             camera.stop()
+            sound.deactivate()
             AttendanceQRIdleTimer.shared.setActive(false, owner: idleOwner)
+        }
+        .onChange(of: soundEnabled) { _, enabled in
+            sound.isEnabled = enabled
+            if enabled, phase == .brushing { sound.startMusic() }
         }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active {
                 Task { await camera.start() }
             } else {
                 camera.stop()
+                sound.deactivate()
                 if phase == .brushing { phase = .ready }
             }
         }
         .onChange(of: phase) { _, newPhase in
             AttendanceQRIdleTimer.shared.setActive(newPhase == .brushing, owner: idleOwner)
+            if newPhase == .brushing { sound.startMusic() } else { sound.stopMusic() }
         }
         .task(id: phase) {
             guard phase == .brushing else { return }
@@ -164,28 +189,69 @@ struct BrushingCoachView: View {
             while !Task.isCancelled, phase == .brushing {
                 try? await Task.sleep(for: .milliseconds(100))
                 let now = clock.now
-                let delta = (now - last) / .seconds(1)
+                tick(delta: (now - last) / .seconds(1))
                 last = now
-                session.advance(by: delta, brushing: camera.isBrushing())
-                if session.isFinished { phase = .finished }
             }
         }
         .sensoryFeedback(.impact, trigger: session.currentZone)
+        .sensoryFeedback(.impact(weight: .light), trigger: germPops)
         .sensoryFeedback(.success, trigger: phase) { _, newPhase in newPhase == .finished }
     }
+
+    // MARK: - Game loop
+
+    private func tick(delta: TimeInterval) {
+        let brushing = camera.isBrushing()
+        let zone = session.currentZone
+        let before = zone.map(session.germsRemaining(in:)) ?? 0
+        session.advance(by: delta, brushing: brushing)
+        let face = screenFace
+        if let zone, let face {
+            let after = session.germsRemaining(in: zone)
+            if after < before {
+                let index = BrushingSession.germsPerZone - before
+                let point = GermLayout.positions(for: zone, face: face)[index]
+                sparkles.emit(at: point, count: 28, speed: 60...200, size: 10...22)
+                sound.play(after == 0 ? .chime : .pop)
+                germPops += 1
+                if after == 0 { celebrateDate = .now }
+            }
+        }
+        if brushing, let face {
+            sparkles.emit(at: face.mouth, count: 2, speed: 40...120, size: 8...16)
+        }
+        if session.isFinished { finish() }
+    }
+
+    private func start() {
+        session = BrushingSession()
+        celebrateDate = nil
+        earnedStamp = false
+        unlockedMasks = []
+        phase = .brushing
+    }
+
+    private func finish() {
+        let stars = BrushingSession.stars(for: session.overallRatio)
+        if stars > 0 {
+            unlockedMasks = stampCard.add(stars: stars, mask: mask)
+            earnedStamp = true
+        }
+        phase = .finished
+        sound.play(.fanfare)
+        let center = CGPoint(x: overlaySize.width / 2, y: overlaySize.height * 0.3)
+        sparkles.emit(at: center, count: 80, speed: 120...360, size: 12...26)
+    }
+
+    // MARK: - Screens
 
     private var cameraView: some View {
         ZStack {
             CameraPreview(layer: camera.previewLayer)
                 .ignoresSafeArea()
-            GeometryReader { geometry in
-                if let face = camera.face {
-                    FaceEffectOverlay(effect: effect,
-                                      face: ScreenFace(face, imageSize: camera.imageSize, viewSize: geometry.size))
-                }
-            }
-            .ignoresSafeArea()
-            .allowsHitTesting(false)
+            effectLayer
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
 
             VStack(spacing: 12) {
                 switch phase {
@@ -194,99 +260,184 @@ struct BrushingCoachView: View {
                 case .finished: resultPanel
                 }
                 Spacer()
-                if phase != .brushing { controls }
+                switch phase {
+                case .ready, .finished: controls
+                case .brushing: statusBubble
+                }
             }
             .padding(16)
         }
     }
 
+    private var effectLayer: some View {
+        TimelineView(.animation) { timeline in
+            let now = timeline.date
+            let time = now.timeIntervalSinceReferenceDate
+            let brushing = camera.isBrushing(at: now)
+            let sinceClear = celebrateDate.map { now.timeIntervalSince($0) } ?? .infinity
+            ZStack {
+                if let face = screenFace {
+                    if phase == .brushing, let zone = session.currentZone {
+                        let positions = GermLayout.positions(for: zone, face: face)
+                        let size = GermLayout.size(for: face)
+                        let defeated = BrushingSession.germsPerZone - session.germsRemaining(in: zone)
+                        ForEach(defeated..<BrushingSession.germsPerZone, id: \.self) { index in
+                            GermView(color: GermLayout.colors[index], time: time, seed: Double(index) * 2,
+                                     shaking: brushing)
+                                .frame(width: size, height: size)
+                                .position(positions[index])
+                        }
+                    }
+                    MaskView(mask: mask, face: face, time: time, excitement: brushing ? 1 : 0,
+                             hop: sinceClear < 0.6 ? sin(sinceClear / 0.6 * .pi) : 0)
+                }
+                Canvas { context, _ in sparkles.draw(&context, now: now) }
+                if sinceClear < 1.4 {
+                    PikapikaBanner(progress: sinceClear / 1.4)
+                        .position(x: overlaySize.width / 2, y: overlaySize.height * 0.45)
+                }
+            }
+        }
+        .onGeometryChange(for: CGSize.self) { $0.size } action: { overlaySize = $0 }
+    }
+
     private var readyPanel: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("2ふんかん はみがきしよう！")
-                .font(.title2.bold())
-            Text("がめんの「つぎは ここ！」に あわせて、ばしょを かえながら みがいてね。")
-                .font(.subheadline)
+            Label("ばいきんを やっつけよう！", systemImage: "sparkles")
+                .font(.title2.weight(.heavy))
+                .foregroundStyle(.pink)
+            Text("ゴシゴシ みがくと、ばいきんが にげていくよ。2ふんかん がんばろう！")
+                .font(.subheadline.weight(.semibold))
             Text("映像は端末内で処理し、保存・送信しません。採点は口もとの動きの量による目安で、磨き残しは判定できません。")
-                .font(.caption)
+                .font(.caption2)
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
+        .brushingCard()
     }
 
     private var brushingPanel: some View {
         VStack(spacing: 10) {
-            HStack {
-                Text("つぎは ここ！").font(.headline)
+            HStack(alignment: .center, spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("つぎは ここ！")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(.secondary)
+                    Text(session.currentZone?.title ?? "")
+                        .font(.largeTitle.weight(.heavy))
+                        .foregroundStyle(.pink)
+                        .contentTransition(.numericText())
+                        .animation(.spring, value: session.currentZone)
+                }
                 Spacer()
-                Text(Duration.seconds(session.remaining.rounded(.up)),
-                     format: .time(pattern: .minuteSecond))
-                    .font(.headline.monospacedDigit())
+                TimerRing(progress: session.zoneProgress, remaining: session.remaining)
             }
-            Text(session.currentZone?.title ?? "")
-                .font(.largeTitle.bold())
             ZoneMap(current: session.currentZone) { zone in
                 zone.rawValue < (session.currentZone?.rawValue ?? BrushingZone.allCases.count) ? "checkmark" : nil
             }
-            ProgressView(value: session.zoneProgress)
-            Group {
-                if camera.face == nil {
-                    Label("おかおを うつしてね", systemImage: "face.dashed")
-                } else if camera.isBrushing() {
-                    Label("ゴシゴシ！ いいね", systemImage: "sparkles")
-                        .foregroundStyle(.green)
-                } else {
-                    Label("ブラシを うごかそう", systemImage: "hand.wave")
+            HStack {
+                Text("ばいきん")
+                ForEach(0..<BrushingSession.germsPerZone, id: \.self) { index in
+                    let remaining = session.currentZone.map(session.germsRemaining(in:)) ?? 0
+                    Image(systemName: index < BrushingSession.germsPerZone - remaining ? "sparkle" : "ladybug.fill")
+                        .foregroundStyle(index < BrushingSession.germsPerZone - remaining ? Color.yellow : GermLayout.colors[index])
                 }
+                Spacer()
+                Button("やめる") { phase = .ready }
+                    .font(.subheadline.weight(.bold))
+                    .buttonStyle(.bordered)
             }
             .font(.headline)
-            Button("やめる", role: .cancel) { phase = .ready }
-                .buttonStyle(.bordered)
         }
-        .padding(16)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
+        .brushingCard()
+    }
+
+    private var statusBubble: some View {
+        Group {
+            if camera.face == nil {
+                Label("おかおを うつしてね", systemImage: "face.dashed")
+            } else if camera.isBrushing() {
+                Label("ゴシゴシ！ いいね！", systemImage: "sparkles")
+                    .foregroundStyle(.white)
+            } else {
+                Label("ブラシを うごかそう", systemImage: "hand.wave.fill")
+            }
+        }
+        .font(.title3.weight(.heavy))
+        .padding(.horizontal, 22)
+        .padding(.vertical, 12)
+        .background(camera.isBrushing() ? AnyShapeStyle(Color.pink.gradient) : AnyShapeStyle(.regularMaterial),
+                    in: Capsule())
+        .shadow(color: .black.opacity(0.2), radius: 8, y: 4)
+        .animation(.spring(duration: 0.25), value: camera.isBrushing())
     }
 
     private var resultPanel: some View {
         let stars = BrushingSession.stars(for: session.overallRatio)
         return VStack(spacing: 10) {
-            Text(String(repeating: "★", count: stars) + String(repeating: "☆", count: 3 - stars))
-                .font(.system(size: 44))
-                .foregroundStyle(.yellow)
-                .accessibilityLabel("ほし \(stars)こ")
+            StarRow(stars: stars)
             Text(resultMessage(stars: stars))
-                .font(.title3.bold())
+                .font(.title2.weight(.heavy))
+                .foregroundStyle(.pink)
                 .multilineTextAlignment(.center)
+            if earnedStamp {
+                Label("がんばりカードに スタンプ ゲット！", systemImage: "seal.fill")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(.orange)
+            }
+            ForEach(unlockedMasks) { newMask in
+                HStack {
+                    MaskAvatar(mask: newMask, size: 48)
+                    Text("NEW！ \(newMask.title)の おめんが つかえるよ")
+                        .font(.subheadline.weight(.heavy))
+                }
+            }
             ZoneMap(current: nil) { zone in
                 BrushingSession.stars(for: session.ratio(for: zone)) >= 2 ? "star.fill" : "star"
             }
         }
         .frame(maxWidth: .infinity)
-        .padding(16)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
+        .brushingCard()
     }
 
     private var controls: some View {
         VStack(spacing: 12) {
-            Picker("エフェクト", selection: $effect) {
-                ForEach(FaceEffect.allCases) { Text($0.title).tag($0) }
+            HStack(spacing: 10) {
+                ForEach(BrushingMask.allCases) { option in
+                    MaskButton(mask: option, selected: option == mask, unlocked: stampCard.isUnlocked(option),
+                               remaining: option.requiredStamps - stampCard.stamps.count) {
+                        mask = option
+                    }
+                }
             }
-            .pickerStyle(.segmented)
-            Button {
-                session = BrushingSession()
-                phase = .brushing
-            } label: {
-                Text(phase == .finished ? "もういちど" : "はじめる")
-                    .font(.title3.bold())
-                    .frame(maxWidth: .infinity)
+            HStack(spacing: 10) {
+                Button {
+                    showingStampCard = true
+                } label: {
+                    VStack(spacing: 2) {
+                        Image(systemName: "seal.fill")
+                        Text("\(stampCard.stamps.count)").font(.caption.weight(.heavy))
+                    }
+                    .frame(width: 56, height: 56)
+                }
+                .buttonStyle(.bordered)
+                .tint(.orange)
+                .accessibilityLabel("がんばりカード スタンプ \(stampCard.stamps.count)こ")
+
+                Button(action: start) {
+                    Text(phase == .finished ? "もういちど！" : "はじめる！")
+                        .font(.title2.weight(.heavy))
+                        .frame(maxWidth: .infinity, minHeight: 56)
+                        .foregroundStyle(.white)
+                        .background(LinearGradient(colors: [.pink, .orange], startPoint: .leading, endPoint: .trailing),
+                                    in: Capsule())
+                        .shadow(color: .pink.opacity(0.4), radius: 8, y: 4)
+                }
+                .disabled(camera.status != .running)
+                .opacity(camera.status == .running ? 1 : 0.5)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .disabled(camera.status != .running)
         }
-        .padding(12)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
+        .brushingCard()
     }
 
     private var unauthorizedView: some View {
@@ -307,11 +458,92 @@ struct BrushingCoachView: View {
 
     private func resultMessage(stars: Int) -> String {
         switch stars {
-        case 3: "すごい！ ピカピカだね"
+        case 3: "すごい！ ピカピカだね！"
         case 2: "よくできました！"
         case 1: "もうすこし ゴシゴシしよう"
         default: "つぎは いっしょに がんばろう"
         }
+    }
+}
+
+private extension View {
+    func brushingCard() -> some View {
+        padding(16)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 26))
+            .overlay(RoundedRectangle(cornerRadius: 26).stroke(.white.opacity(0.6), lineWidth: 1.5))
+            .shadow(color: .black.opacity(0.15), radius: 10, y: 4)
+    }
+}
+
+private struct MaskButton: View {
+    let mask: BrushingMask
+    let selected: Bool
+    let unlocked: Bool
+    let remaining: Int
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 2) {
+                MaskAvatar(mask: mask, size: 56)
+                    .saturation(unlocked ? 1 : 0)
+                    .opacity(unlocked ? 1 : 0.5)
+                    .overlay {
+                        if !unlocked { Image(systemName: "lock.fill").foregroundStyle(.secondary) }
+                    }
+                    .background(Circle().fill(selected ? Color.pink.opacity(0.2) : .clear))
+                    .overlay(Circle().stroke(selected ? Color.pink : .clear, lineWidth: 3))
+                Text(unlocked ? mask.title : "あと\(remaining)かい")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(selected ? .pink : .secondary)
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.plain)
+        .disabled(!unlocked)
+        .accessibilityLabel(unlocked ? "\(mask.title)の おめん" : "\(mask.title)の おめん、あと\(remaining)かいで つかえる")
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+}
+
+private struct TimerRing: View {
+    let progress: Double
+    let remaining: TimeInterval
+
+    var body: some View {
+        ZStack {
+            Circle().stroke(Color.pink.opacity(0.2), lineWidth: 8)
+            Circle()
+                .trim(from: 0, to: progress)
+                .stroke(Color.pink.gradient, style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+            Text(Duration.seconds(remaining.rounded(.up)), format: .time(pattern: .minuteSecond))
+                .font(.subheadline.weight(.heavy).monospacedDigit())
+        }
+        .frame(width: 64, height: 64)
+        .accessibilityLabel("のこり \(Int(remaining.rounded(.up)))びょう")
+    }
+}
+
+private struct StarRow: View {
+    let stars: Int
+    @State private var revealed = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ForEach(0..<3, id: \.self) { index in
+                Image(systemName: index < stars ? "star.fill" : "star")
+                    .font(.system(size: 46, weight: .heavy))
+                    .foregroundStyle(index < stars ? Color.yellow.gradient : Color.gray.gradient)
+                    .shadow(color: .orange.opacity(index < stars ? 0.5 : 0), radius: 6)
+                    .scaleEffect(revealed ? 1 : 0.1)
+                    .rotationEffect(.degrees(revealed ? 0 : -90))
+                    .animation(.spring(duration: 0.5, bounce: 0.6).delay(Double(index) * 0.3), value: revealed)
+            }
+        }
+        .onAppear { revealed = true }
+        .accessibilityElement()
+        .accessibilityLabel("ほし \(stars)こ")
     }
 }
 
@@ -334,11 +566,13 @@ private struct ZoneMap: View {
                             if let name = symbol(zone) { Image(systemName: name) }
                             Text(zone.shortTitle)
                         }
-                        .font(.subheadline.bold())
+                        .font(.subheadline.weight(.heavy))
                         .frame(maxWidth: .infinity, minHeight: 34)
-                        .background(zone == current ? Color.accentColor : Color.secondary.opacity(0.2),
-                                    in: RoundedRectangle(cornerRadius: 10))
+                        .background(zone == current ? AnyShapeStyle(Color.pink.gradient) : AnyShapeStyle(Color.white.opacity(0.5)),
+                                    in: RoundedRectangle(cornerRadius: 12))
                         .foregroundStyle(zone == current ? Color.white : Color.primary)
+                        .scaleEffect(zone == current ? 1.06 : 1)
+                        .animation(.spring(duration: 0.3, bounce: 0.5), value: current)
                     }
                 }
             }
@@ -347,90 +581,58 @@ private struct ZoneMap: View {
     }
 }
 
-/// A face mapped from normalized image coordinates into the aspect-filled preview.
-private struct ScreenFace {
-    let width: CGFloat
-    let eyeCenter: CGPoint
-    let eyeDistance: CGFloat
-    let leftEye: CGPoint
-    let rightEye: CGPoint
-    let nose: CGPoint
-    let roll: Angle
+private struct BrushingStampCardView: View {
+    let card: BrushingStampCard
+    @Environment(\.dismiss) private var dismiss
 
-    init(_ face: BrushingFrame.Face, imageSize: CGSize, viewSize: CGSize) {
-        let scale = max(viewSize.width / max(imageSize.width, 1), viewSize.height / max(imageSize.height, 1))
-        let origin = CGPoint(x: (viewSize.width - imageSize.width * scale) / 2,
-                             y: (viewSize.height - imageSize.height * scale) / 2)
-        func map(_ point: CGPoint) -> CGPoint {
-            CGPoint(x: origin.x + point.x * imageSize.width * scale, y: origin.y + point.y * imageSize.height * scale)
-        }
-        width = face.bounds.width * imageSize.width * scale
-        leftEye = map(face.leftEye)
-        rightEye = map(face.rightEye)
-        nose = map(face.nose)
-        eyeCenter = CGPoint(x: (leftEye.x + rightEye.x) / 2, y: (leftEye.y + rightEye.y) / 2)
-        eyeDistance = hypot(rightEye.x - leftEye.x, rightEye.y - leftEye.y)
-        roll = .radians(atan2(rightEye.y - leftEye.y, rightEye.x - leftEye.x))
+    private var nextMask: BrushingMask? {
+        BrushingMask.allCases.first { !card.isUnlocked($0) }
     }
-
-    /// A point offset from the eye center in the face's own (tilted) axes.
-    func point(x: CGFloat, y: CGFloat) -> CGPoint {
-        let c = cos(roll.radians), s = sin(roll.radians)
-        return CGPoint(x: eyeCenter.x + x * c - y * s, y: eyeCenter.y + x * s + y * c)
-    }
-}
-
-private struct FaceEffectOverlay: View {
-    let effect: FaceEffect
-    let face: ScreenFace
 
     var body: some View {
-        let w = face.width
-        switch effect {
-        case .none:
-            EmptyView()
-        case .bunny:
-            ForEach([-1.0, 1.0], id: \.self) { side in
-                BunnyEar()
-                    .frame(width: w * 0.26, height: w * 0.8)
-                    .rotationEffect(face.roll + .degrees(side * 12))
-                    .position(face.point(x: side * w * 0.2, y: -w * 0.95))
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 16) {
+                    Text("スタンプ \(card.stamps.count)こ")
+                        .font(.largeTitle.weight(.heavy))
+                        .foregroundStyle(.orange)
+                    if let nextMask {
+                        HStack {
+                            MaskAvatar(mask: nextMask, size: 44).saturation(0)
+                            Text("あと \(nextMask.requiredStamps - card.stamps.count)こで \(nextMask.title)の おめん！")
+                                .font(.headline)
+                        }
+                    }
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 72), spacing: 12)], spacing: 12) {
+                        ForEach(card.stamps.reversed()) { stamp in
+                            VStack(spacing: 2) {
+                                MaskAvatar(mask: stamp.mask, size: 56)
+                                    .background(Circle().fill(Color.orange.opacity(0.15)))
+                                Text(String(repeating: "★", count: stamp.stars))
+                                    .font(.caption.weight(.heavy))
+                                    .foregroundStyle(.yellow)
+                                Text(stamp.date, format: .dateTime.month().day())
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .accessibilityElement(children: .combine)
+                        }
+                    }
+                    if card.stamps.isEmpty {
+                        Text("はみがきを すると スタンプが たまるよ")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(20)
             }
-            Ellipse()
-                .fill(Color.pink)
-                .frame(width: w * 0.12, height: w * 0.08)
-                .rotationEffect(face.roll)
-                .position(face.nose)
-        case .panda:
-            ForEach([-1.0, 1.0], id: \.self) { side in
-                Circle()
-                    .fill(Color.black)
-                    .frame(width: w * 0.34, height: w * 0.34)
-                    .position(face.point(x: side * w * 0.4, y: -w * 0.62))
+            .fontDesign(.rounded)
+            .navigationTitle("がんばりカード")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("とじる") { dismiss() }
+                }
             }
-            ForEach([face.leftEye, face.rightEye], id: \.x) { eye in
-                let side: Double = eye.x < face.eyeCenter.x ? -1 : 1
-                Ellipse()
-                    .fill(Color.black.opacity(0.75))
-                    .frame(width: face.eyeDistance * 0.6, height: face.eyeDistance * 0.8)
-                    .rotationEffect(face.roll + .degrees(side * -30))
-                    .position(eye)
-            }
-            Ellipse()
-                .fill(Color.black)
-                .frame(width: w * 0.14, height: w * 0.09)
-                .rotationEffect(face.roll)
-                .position(face.nose)
-        }
-    }
-}
-
-private struct BunnyEar: View {
-    var body: some View {
-        ZStack {
-            Capsule().fill(Color.white)
-            Capsule().stroke(Color.gray.opacity(0.4), lineWidth: 2)
-            Capsule().fill(Color.pink.opacity(0.7)).scaleEffect(x: 0.5, y: 0.8)
         }
     }
 }

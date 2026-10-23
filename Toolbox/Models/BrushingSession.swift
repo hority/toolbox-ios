@@ -67,6 +67,14 @@ struct BrushingSession: Sendable {
         BrushingZone.allCases.map(ratio(for:)).reduce(0, +) / Double(BrushingZone.allCases.count)
     }
 
+    static let germsPerZone = 3
+    /// Brushing time that defeats one germ; all three fall at the two-star line.
+    static let secondsPerGerm = zoneDuration * 0.6 / Double(germsPerZone)
+
+    func germsRemaining(in zone: BrushingZone) -> Int {
+        max(0, Self.germsPerZone - Int(activeTime[zone, default: 0] / Self.secondsPerGerm))
+    }
+
     static func stars(for ratio: Double) -> Int {
         switch ratio {
         case 0.7...: 3
