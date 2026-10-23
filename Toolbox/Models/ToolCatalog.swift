@@ -4,6 +4,7 @@ enum ToolID: String, Hashable, Sendable {
     case textCounter
     case shortcutSigning
     case attendanceQR
+    case brushingCoach
 }
 
 enum ToolAvailability: Equatable, Sendable {
@@ -84,6 +85,14 @@ enum ToolCatalog {
             symbol: "qrcode",
             availability: .available,
             keywords: ["登庁", "退庁", "出勤", "退勤", "QR", "ウィジェット"]
+        ),
+        ToolDefinition(
+            id: .brushingCoach,
+            title: "はみがきコーチ",
+            subtitle: "インカメラで2分ナビ・うさぎやパンダに変身",
+            symbol: "mouth",
+            availability: .available,
+            keywords: ["歯みがき", "歯磨き", "はみがき", "子供", "こども", "カメラ", "うさぎ", "パンダ", "タイマー"]
         )
     ]
 
