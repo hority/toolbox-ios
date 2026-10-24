@@ -16,6 +16,6 @@ platform :ios do
     profile = "match AppStore #{BUNDLE_ID}"
     widget_profile = "match AppStore #{WIDGET_BUNDLE_ID}"
     ipa = build_app(project: 'Toolbox.xcodeproj', scheme: 'Toolbox', configuration: 'Release', clean: true, output_directory: 'build', output_name: 'Toolbox.ipa', archive_path: 'build/Toolbox.xcarchive', xcargs: "CURRENT_PROJECT_VERSION=#{number} DEVELOPMENT_TEAM=#{team} CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY='Apple Distribution' TOOLBOX_APP_PROFILE='#{profile}' TOOLBOX_WIDGET_PROFILE='#{widget_profile}'", export_options: {method: 'app-store-connect', signingStyle: 'manual', teamID: team, provisioningProfiles: {BUNDLE_ID => profile, WIDGET_BUNDLE_ID => widget_profile}})
-    upload_to_testflight(api_key: key, ipa: ipa, app_identifier: BUNDLE_ID, skip_waiting_for_build_processing: false, wait_processing_interval: 20, wait_processing_timeout_duration: 1200, changelog: 'はみがきコーチ: おめんを19種類に。オオカミ・ブタ・ウシ・ウマ・シャチ・サイ・キリン・カンガルー・シマウマ・チーター・ライオン・トラ・カエルを追加。ロックをなくし最初から全部選べるように。おめん選びは動物の顔のドット絵アイコン。確認: 新しいおめんの位置と大きさ。', distribute_external: false, submit_beta_review: false)
+    upload_to_testflight(api_key: key, ipa: ipa, app_identifier: BUNDLE_ID, skip_waiting_for_build_processing: false, wait_processing_interval: 20, wait_processing_timeout_duration: 1200, changelog: 'はみがきコーチ: おめんを28種類に。オオカミ・ブタ・ウシ・ウマ・シャチ・サイ・キリン・カンガルー・シマウマ・チーター・ライオン・トラ・カエル、ヤギ・ヒツジ・クモ・ネズミ・ヒヨコ・ニワトリ・キツネ・せんせい（メガネ）・おいしゃさん（額帯鏡）を追加。ロックなしで全部選べます。確認: 新しいおめんの位置と大きさ。', distribute_external: false, submit_beta_review: false)
   end
 end
