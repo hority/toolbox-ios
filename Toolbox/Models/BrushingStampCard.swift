@@ -3,6 +3,7 @@ import Foundation
 enum BrushingMask: String, CaseIterable, Identifiable, Codable, Sendable {
     case bunny, panda, cat, penguin, bear, unicorn
     case wolf, pig, cow, horse, orca, rhino, giraffe, kangaroo, zebra, cheetah, lion, tiger, frog
+    case goat, sheep, spider, mouse, chick, chicken, fox, teacher, doctor
 
     var id: String { rawValue }
 
@@ -27,6 +28,15 @@ enum BrushingMask: String, CaseIterable, Identifiable, Codable, Sendable {
         case .lion: "ライオン"
         case .tiger: "トラ"
         case .frog: "カエル"
+        case .goat: "ヤギ"
+        case .sheep: "ヒツジ"
+        case .spider: "クモ"
+        case .mouse: "ネズミ"
+        case .chick: "ヒヨコ"
+        case .chicken: "ニワトリ"
+        case .fox: "キツネ"
+        case .teacher: "せんせい"
+        case .doctor: "おいしゃさん"
         }
     }
 }

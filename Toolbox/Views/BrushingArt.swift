@@ -45,11 +45,13 @@ struct ScreenFace {
 
 /// Where each dot-art mask sits, in units of face width.
 private struct MaskArt {
-    var topWidth: CGFloat
+    var topWidth: CGFloat?
     /// Distance above the eye line where the headband's bottom edge sits.
-    var topLift: CGFloat
+    var topLift: CGFloat = 0.3
     var noseWidth: CGFloat?
     var noseDrop: CGFloat = 0
+    /// Width of an eye piece (such as glasses) in units of the distance between the eyes.
+    var eyesWidth: CGFloat?
 
     static func of(_ mask: BrushingMask) -> MaskArt {
         switch mask {
@@ -73,6 +75,16 @@ private struct MaskArt {
         case .lion: MaskArt(topWidth: 1.7, topLift: 0.05, noseWidth: 0.55, noseDrop: 0.06)
         case .tiger: MaskArt(topWidth: 1.3, topLift: 0.28, noseWidth: 0.55, noseDrop: 0.06)
         case .frog: MaskArt(topWidth: 1.2, topLift: 0.3, noseWidth: nil)
+        case .goat: MaskArt(topWidth: 1.3, topLift: 0.3, noseWidth: 0.4, noseDrop: 0.08)
+        case .sheep: MaskArt(topWidth: 1.5, topLift: 0.2, noseWidth: 0.45, noseDrop: 0.06)
+        case .spider: MaskArt(topWidth: 1.1, topLift: 0.3, noseWidth: nil)
+        case .mouse: MaskArt(topWidth: 1.4, topLift: 0.28, noseWidth: 0.58, noseDrop: 0.04)
+        case .chick: MaskArt(topWidth: 1.0, topLift: 0.3, noseWidth: 0.3, noseDrop: 0.03)
+        case .chicken: MaskArt(topWidth: 0.9, topLift: 0.3, noseWidth: 0.3, noseDrop: 0.06)
+        case .fox: MaskArt(topWidth: 1.3, topLift: 0.3, noseWidth: 0.45, noseDrop: 0.06)
+        case .teacher: MaskArt(topWidth: nil, eyesWidth: 1.9)
+        // The head mirror band is straight, so it sits on the forehead.
+        case .doctor: MaskArt(topWidth: 1.2, topLift: 0.38, noseWidth: nil)
         }
     }
 }
@@ -117,13 +129,20 @@ struct MaskView: View {
                     .rotationEffect(face.roll)
                     .position(face.offset(face.nose, x: 0, y: w * art.noseDrop))
             }
-            let top = PixelSprite(name: "pixel-mask-\(mask.rawValue)-top", width: w * art.topWidth)
-            let anchor = face.point(x: 0, y: -w * art.topLift)
-            top
-                .scaleEffect(x: 1, y: squash, anchor: .bottom)
-                .rotationEffect(face.roll + .degrees(wiggle), anchor: .bottom)
-                // Place the unrotated bottom edge on the anchor so rotation pivots there.
-                .position(x: anchor.x, y: anchor.y - top.height / 2)
+            if let eyesWidth = art.eyesWidth {
+                PixelSprite(name: "pixel-mask-\(mask.rawValue)-eyes", width: face.eyeDistance * eyesWidth)
+                    .rotationEffect(face.roll)
+                    .position(face.eyeCenter)
+            }
+            if let topWidth = art.topWidth {
+                let top = PixelSprite(name: "pixel-mask-\(mask.rawValue)-top", width: w * topWidth)
+                let anchor = face.point(x: 0, y: -w * art.topLift)
+                top
+                    .scaleEffect(x: 1, y: squash, anchor: .bottom)
+                    .rotationEffect(face.roll + .degrees(wiggle), anchor: .bottom)
+                    // Place the unrotated bottom edge on the anchor so rotation pivots there.
+                    .position(x: anchor.x, y: anchor.y - top.height / 2)
+            }
         }
         .offset(y: -(hop * 3).rounded() * w * 0.04)
     }
