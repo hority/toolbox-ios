@@ -114,6 +114,7 @@ struct BrushingCoachView: View {
     @State private var session = BrushingSession()
     @State private var overlaySize = CGSize.zero
     @State private var celebrateDate: Date?
+    @State private var zoneAnnounceDate: Date?
     @State private var germPops = 0
     @State private var earnedStamp = false
     @State private var unlockedMasks: [BrushingMask] = []
@@ -193,6 +194,9 @@ struct BrushingCoachView: View {
                 last = now
             }
         }
+        .onChange(of: session.currentZone) { _, zone in
+            zoneAnnounceDate = zone == nil ? nil : .now
+        }
         .sensoryFeedback(.impact, trigger: session.currentZone)
         .sensoryFeedback(.impact(weight: .light), trigger: germPops)
         .sensoryFeedback(.success, trigger: phase) { _, newPhase in newPhase == .finished }
@@ -256,7 +260,7 @@ struct BrushingCoachView: View {
             VStack(spacing: 12) {
                 switch phase {
                 case .ready: readyPanel
-                case .brushing: brushingPanel
+                case .brushing: brushingHUD
                 case .finished: resultPanel
                 }
                 Spacer()
@@ -275,6 +279,7 @@ struct BrushingCoachView: View {
             let time = now.timeIntervalSinceReferenceDate
             let brushing = camera.isBrushing(at: now)
             let sinceClear = celebrateDate.map { now.timeIntervalSince($0) } ?? .infinity
+            let sinceZone = zoneAnnounceDate.map { now.timeIntervalSince($0) } ?? .infinity
             ZStack {
                 if let face = screenFace {
                     if phase == .brushing, let zone = session.currentZone {
@@ -292,6 +297,10 @@ struct BrushingCoachView: View {
                              hop: sinceClear < 0.6 ? sin(sinceClear / 0.6 * .pi) : 0)
                 }
                 Canvas { context, _ in sparkles.draw(&context, now: now) }
+                if phase == .brushing, sinceZone < 2, let zone = session.currentZone {
+                    ZoneToast(title: zone.title, progress: sinceZone / 2)
+                        .position(x: overlaySize.width / 2, y: overlaySize.height * 0.24)
+                }
                 if sinceClear < 1.4 {
                     PikapikaBanner(progress: sinceClear / 1.4)
                         .position(x: overlaySize.width / 2, y: overlaySize.height * 0.45)
@@ -302,54 +311,31 @@ struct BrushingCoachView: View {
     }
 
     private var readyPanel: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label("ばいきんを やっつけよう！", systemImage: "sparkles")
-                .font(.title2.weight(.heavy))
-                .foregroundStyle(.pink)
-            Text("ゴシゴシ みがくと、ばいきんが にげていくよ。2ふんかん がんばろう！")
-                .font(.subheadline.weight(.semibold))
-            Text("映像は端末内で処理し、保存・送信しません。採点は口もとの動きの量による目安で、磨き残しは判定できません。")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .brushingCard()
+        Label("ばいきんを やっつけよう！", systemImage: "sparkles")
+            .font(.headline.weight(.heavy))
+            .foregroundStyle(.pink)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 10)
+            .background(.regularMaterial, in: Capsule())
+            .shadow(color: .black.opacity(0.15), radius: 6, y: 3)
     }
 
-    private var brushingPanel: some View {
-        VStack(spacing: 10) {
-            HStack(alignment: .center, spacing: 12) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("つぎは ここ！")
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(.secondary)
-                    Text(session.currentZone?.title ?? "")
-                        .font(.largeTitle.weight(.heavy))
-                        .foregroundStyle(.pink)
-                        .contentTransition(.numericText())
-                        .animation(.spring, value: session.currentZone)
-                }
-                Spacer()
-                TimerRing(progress: session.zoneProgress, remaining: session.remaining)
+    /// Kept small so the face, mask and germs stay visible.
+    private var brushingHUD: some View {
+        HStack(alignment: .top) {
+            ProgressHUD(session: session)
+            Spacer()
+            Button {
+                phase = .ready
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.headline.weight(.heavy))
+                    .frame(width: 44, height: 44)
+                    .background(.regularMaterial, in: Circle())
             }
-            ZoneMap(current: session.currentZone) { zone in
-                zone.rawValue < (session.currentZone?.rawValue ?? BrushingZone.allCases.count) ? "checkmark" : nil
-            }
-            HStack {
-                Text("ばいきん")
-                ForEach(0..<BrushingSession.germsPerZone, id: \.self) { index in
-                    let remaining = session.currentZone.map(session.germsRemaining(in:)) ?? 0
-                    Image(systemName: index < BrushingSession.germsPerZone - remaining ? "sparkle" : "ladybug.fill")
-                        .foregroundStyle(index < BrushingSession.germsPerZone - remaining ? Color.yellow : GermLayout.colors[index])
-                }
-                Spacer()
-                Button("やめる") { phase = .ready }
-                    .font(.subheadline.weight(.bold))
-                    .buttonStyle(.bordered)
-            }
-            .font(.headline)
+            .buttonStyle(.plain)
+            .accessibilityLabel("やめる")
         }
-        .brushingCard()
     }
 
     private var statusBubble: some View {
@@ -402,11 +388,13 @@ struct BrushingCoachView: View {
 
     private var controls: some View {
         VStack(spacing: 12) {
-            HStack(spacing: 10) {
-                ForEach(BrushingMask.allCases) { option in
-                    MaskButton(mask: option, selected: option == mask, unlocked: stampCard.isUnlocked(option),
-                               remaining: option.requiredStamps - stampCard.stamps.count) {
-                        mask = option
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(BrushingMask.allCases) { option in
+                        MaskButton(mask: option, selected: option == mask, unlocked: stampCard.isUnlocked(option),
+                                   remaining: option.requiredStamps - stampCard.stamps.count) {
+                            mask = option
+                        }
                     }
                 }
             }
@@ -436,6 +424,9 @@ struct BrushingCoachView: View {
                 .disabled(camera.status != .running)
                 .opacity(camera.status == .running ? 1 : 0.5)
             }
+            Text("映像は端末内で処理し、保存・送信しません。採点は口もとの動きの量による目安で、磨き残しは判定できません。")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
         }
         .brushingCard()
     }
@@ -496,8 +487,10 @@ private struct MaskButton: View {
                 Text(unlocked ? mask.title : "あと\(remaining)かい")
                     .font(.caption2.weight(.bold))
                     .foregroundStyle(selected ? .pink : .secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
             }
-            .frame(maxWidth: .infinity)
+            .frame(width: 64)
         }
         .buttonStyle(.plain)
         .disabled(!unlocked)
@@ -506,22 +499,64 @@ private struct MaskButton: View {
     }
 }
 
-private struct TimerRing: View {
-    let progress: Double
-    let remaining: TimeInterval
+/// Whole-session ring with a tiny mouth map: upper row then lower row, as seen in the mirror.
+private struct ProgressHUD: View {
+    let session: BrushingSession
+
+    private static let rows: [[BrushingZone]] = [
+        [.upperLeft, .upperFront, .upperRight],
+        [.lowerLeft, .lowerFront, .lowerRight]
+    ]
 
     var body: some View {
         ZStack {
-            Circle().stroke(Color.pink.opacity(0.2), lineWidth: 8)
+            Circle().fill(.regularMaterial)
+            Circle().stroke(Color.pink.opacity(0.2), lineWidth: 6)
             Circle()
-                .trim(from: 0, to: progress)
-                .stroke(Color.pink.gradient, style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                .trim(from: 0, to: 1 - session.remaining / BrushingSession.totalDuration)
+                .stroke(Color.pink.gradient, style: StrokeStyle(lineWidth: 6, lineCap: .round))
                 .rotationEffect(.degrees(-90))
-            Text(Duration.seconds(remaining.rounded(.up)), format: .time(pattern: .minuteSecond))
-                .font(.subheadline.weight(.heavy).monospacedDigit())
+            VStack(spacing: 3) {
+                ForEach(Self.rows, id: \.first) { row in
+                    HStack(spacing: 3) {
+                        ForEach(row) { zone in
+                            RoundedRectangle(cornerRadius: 3)
+                                .fill(color(for: zone))
+                                .frame(width: 11, height: 9)
+                        }
+                    }
+                }
+            }
         }
-        .frame(width: 64, height: 64)
-        .accessibilityLabel("のこり \(Int(remaining.rounded(.up)))びょう")
+        .frame(width: 68, height: 68)
+        .shadow(color: .black.opacity(0.15), radius: 6, y: 3)
+        .accessibilityElement()
+        .accessibilityLabel("\(session.currentZone?.title ?? "") のこり \(Int(session.remaining.rounded(.up)))びょう")
+    }
+
+    private func color(for zone: BrushingZone) -> Color {
+        guard let current = session.currentZone else { return .mint }
+        if zone == current { return .pink }
+        return zone.rawValue < current.rawValue ? .mint : Color.secondary.opacity(0.35)
+    }
+}
+
+/// The new zone's name, shown briefly when it changes. `progress` runs 0→1.
+private struct ZoneToast: View {
+    let title: String
+    let progress: Double
+
+    var body: some View {
+        Text("つぎは \(title)！")
+            .font(.title.weight(.heavy))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 24)
+            .padding(.vertical, 12)
+            .background(Color.pink.gradient, in: Capsule())
+            .shadow(color: .black.opacity(0.2), radius: 8, y: 4)
+            .scaleEffect(0.7 + 0.3 * min(1, progress * 6))
+            .opacity(progress > 0.8 ? (1 - progress) * 5 : 1)
+            .accessibilityHidden(true)
     }
 }
 
