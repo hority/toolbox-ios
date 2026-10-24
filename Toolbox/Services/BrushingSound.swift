@@ -3,35 +3,44 @@ import AVFoundation
 /// Original BGM and effects bundled in Resources/Brushing.
 @MainActor
 final class BrushingSound {
-    enum Effect: String { case pop, chime, fanfare }
+    enum Track: String { case menu = "brushing-menu", brushing = "brushing-bgm" }
+    enum Effect: String, CaseIterable { case pop, chime, fanfare, select, tap }
 
     var isEnabled = true {
         didSet { if !isEnabled { stopMusic() } }
     }
 
-    private lazy var music = Self.player("brushing-bgm", loops: true)
+    private var current: Track?
+    private lazy var tracks: [Track: AVAudioPlayer] = Dictionary(
+        uniqueKeysWithValues: [Track.menu, .brushing].compactMap { track in
+            Self.player(track.rawValue, loops: true).map { (track, $0) }
+        }
+    )
     private lazy var effects: [Effect: AVAudioPlayer] = Dictionary(
-        uniqueKeysWithValues: [Effect.pop, .chime, .fanfare].compactMap { effect in
+        uniqueKeysWithValues: Effect.allCases.compactMap { effect in
             Self.player("brushing-\(effect.rawValue)", loops: false).map { (effect, $0) }
         }
     )
 
-    func startMusic() {
+    /// Switches to `track` from the start; keeps playing if it is already on.
+    func playMusic(_ track: Track) {
         guard isEnabled else { return }
-        try? AVAudioSession.sharedInstance().setCategory(.playback)
-        try? AVAudioSession.sharedInstance().setActive(true)
-        music?.currentTime = 0
-        music?.play()
+        if current == track, tracks[track]?.isPlaying == true { return }
+        stopMusic()
+        activate()
+        tracks[track]?.currentTime = 0
+        tracks[track]?.play()
+        current = track
     }
 
     func stopMusic() {
-        music?.stop()
+        tracks.values.forEach { $0.stop() }
+        current = nil
     }
 
     func play(_ effect: Effect) {
         guard isEnabled, let player = effects[effect] else { return }
-        try? AVAudioSession.sharedInstance().setCategory(.playback)
-        try? AVAudioSession.sharedInstance().setActive(true)
+        activate()
         player.currentTime = 0
         player.play()
     }
@@ -42,11 +51,16 @@ final class BrushingSound {
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 
+    private func activate() {
+        try? AVAudioSession.sharedInstance().setCategory(.playback)
+        try? AVAudioSession.sharedInstance().setActive(true)
+    }
+
     private static func player(_ name: String, loops: Bool) -> AVAudioPlayer? {
         guard let url = Bundle.main.url(forResource: name, withExtension: "wav"),
               let player = try? AVAudioPlayer(contentsOf: url) else { return nil }
         player.numberOfLoops = loops ? -1 : 0
-        player.volume = loops ? 0.55 : 0.9
+        player.volume = loops ? 0.5 : 0.9
         player.prepareToPlay()
         return player
     }
