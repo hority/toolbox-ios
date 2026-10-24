@@ -117,7 +117,6 @@ struct BrushingCoachView: View {
     @State private var zoneAnnounceDate: Date?
     @State private var germPops = 0
     @State private var earnedStamp = false
-    @State private var unlockedMasks: [BrushingMask] = []
     @State private var showingStampCard = false
     @State private var idleOwner = UUID()
 
@@ -162,7 +161,6 @@ struct BrushingCoachView: View {
         }
         .task {
             sound.isEnabled = soundEnabled
-            if !stampCard.isUnlocked(mask) { mask = .bunny }
             await camera.start()
         }
         .onDisappear {
@@ -235,14 +233,13 @@ struct BrushingCoachView: View {
         session = BrushingSession()
         celebrateDate = nil
         earnedStamp = false
-        unlockedMasks = []
         phase = .brushing
     }
 
     private func finish() {
         let stars = BrushingSession.stars(for: session.overallRatio)
         if stars > 0 {
-            unlockedMasks = stampCard.add(stars: stars, mask: mask)
+            stampCard.add(stars: stars, mask: mask)
             earnedStamp = true
         }
         phase = .finished
@@ -363,14 +360,6 @@ struct BrushingCoachView: View {
                     .font(.pixel(15, relativeTo: .subheadline))
                     .foregroundStyle(PixelStyle.ink)
             }
-            ForEach(unlockedMasks) { newMask in
-                HStack {
-                    MaskAvatar(mask: newMask, size: 48)
-                    Text("NEW！ \(newMask.title)の おめんが つかえるよ")
-                        .font(.pixel(15, relativeTo: .subheadline))
-                        .foregroundStyle(PixelStyle.ink)
-                }
-            }
             ZoneMap(current: nil) { zone in
                 BrushingSession.stars(for: session.ratio(for: zone)) >= 2
             }
@@ -385,8 +374,7 @@ struct BrushingCoachView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(BrushingMask.allCases) { option in
-                        MaskButton(mask: option, selected: option == mask, unlocked: stampCard.isUnlocked(option),
-                                   remaining: option.requiredStamps - stampCard.stamps.count) {
+                        MaskButton(mask: option, selected: option == mask) {
                             mask = option
                         }
                     }
@@ -453,22 +441,13 @@ struct BrushingCoachView: View {
 private struct MaskButton: View {
     let mask: BrushingMask
     let selected: Bool
-    let unlocked: Bool
-    let remaining: Int
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             VStack(spacing: 2) {
-                MaskAvatar(mask: mask, size: 52)
-                    .colorMultiply(unlocked ? .white : .black)
-                    .opacity(unlocked ? 1 : 0.35)
-                    .overlay {
-                        if !unlocked {
-                            Text("？").font(.pixel(22)).foregroundStyle(PixelStyle.ink)
-                        }
-                    }
-                Text(unlocked ? mask.title : "あと\(remaining)")
+                MaskAvatar(mask: mask, size: 48)
+                Text(mask.title)
                     .font(.pixel(12, relativeTo: .caption))
                     .foregroundStyle(PixelStyle.ink)
                     .lineLimit(1)
@@ -479,8 +458,7 @@ private struct MaskButton: View {
             .pixelPanel(selected ? PixelStyle.yellow : .white, shadow: selected)
         }
         .buttonStyle(.plain)
-        .disabled(!unlocked)
-        .accessibilityLabel(unlocked ? "\(mask.title)の おめん" : "\(mask.title)の おめん、あと\(remaining)かいで つかえる")
+        .accessibilityLabel("\(mask.title)の おめん")
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
@@ -604,10 +582,6 @@ private struct BrushingStampCardView: View {
     let card: BrushingStampCard
     @Environment(\.dismiss) private var dismiss
 
-    private var nextMask: BrushingMask? {
-        BrushingMask.allCases.first { !card.isUnlocked($0) }
-    }
-
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -615,13 +589,6 @@ private struct BrushingStampCardView: View {
                     Text("スタンプ \(card.stamps.count)こ")
                         .font(.pixel(32, relativeTo: .largeTitle))
                         .foregroundStyle(PixelStyle.pink)
-                    if let nextMask {
-                        HStack {
-                            MaskAvatar(mask: nextMask, size: 44).colorMultiply(.black).opacity(0.4)
-                            Text("あと \(nextMask.requiredStamps - card.stamps.count)こで \(nextMask.title)の おめん！")
-                                .font(.pixel(16, relativeTo: .headline))
-                        }
-                    }
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 76), spacing: 12)], spacing: 12) {
                         ForEach(card.stamps.reversed()) { stamp in
                             VStack(spacing: 2) {

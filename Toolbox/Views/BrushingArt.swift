@@ -30,18 +30,6 @@ struct ScreenFace {
         roll = .radians(atan2(rightEye.y - leftEye.y, rightEye.x - leftEye.x))
     }
 
-    /// An upright face whose eye center is `center`.
-    init(avatarCenter center: CGPoint, width: CGFloat) {
-        self.width = width
-        eyeCenter = center
-        eyeDistance = width * 0.38
-        leftEye = CGPoint(x: center.x - width * 0.19, y: center.y)
-        rightEye = CGPoint(x: center.x + width * 0.19, y: center.y)
-        nose = CGPoint(x: center.x, y: center.y + width * 0.2)
-        mouth = CGPoint(x: center.x, y: center.y + width * 0.36)
-        roll = .zero
-    }
-
     /// A point offset from the eye center in the face's own (tilted) axes.
     func point(x: CGFloat, y: CGFloat) -> CGPoint {
         offset(eyeCenter, x: x, y: y)
@@ -127,27 +115,18 @@ struct MaskView: View {
     }
 }
 
-/// A mask on a simple dot-art face, for pickers and the stamp card.
+/// The mask's animal face as a dot-art icon, for pickers and the stamp card.
 struct MaskAvatar: View {
     let mask: BrushingMask
     var size: CGFloat = 64
 
     var body: some View {
-        let face = ScreenFace(avatarCenter: CGPoint(x: size / 2, y: size * 0.66), width: size * 0.5)
-        ZStack {
-            PixelFrame(step: size * 0.08)
-                .fill(Color(red: 1, green: 0.85, blue: 0.7))
-                .overlay(PixelFrame(step: size * 0.08).stroke(PixelStyle.ink, lineWidth: 2))
-                .frame(width: size * 0.54, height: size * 0.5)
-                .position(x: size / 2, y: size * 0.7)
-            ForEach([face.leftEye, face.rightEye], id: \.x) { eye in
-                Rectangle().fill(PixelStyle.ink).frame(width: size * 0.06, height: size * 0.08).position(eye)
-            }
-            MaskView(mask: mask, face: face, time: 0)
-        }
-        .frame(width: size, height: size)
-        .accessibilityElement()
-        .accessibilityLabel(mask.title)
+        Image("pixel-icon-\(mask.rawValue)")
+            .resizable()
+            .interpolation(.none)
+            .scaledToFit()
+            .frame(width: size, height: size)
+            .accessibilityLabel(mask.title)
     }
 }
 
