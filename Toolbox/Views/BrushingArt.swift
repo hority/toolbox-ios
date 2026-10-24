@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// A face in view coordinates, either tracked from the camera or drawn for an avatar.
 struct ScreenFace {
@@ -54,8 +55,28 @@ struct ScreenFace {
 
 // MARK: - Masks
 
-/// Original animal masks. `excitement` (0–1) wiggles the ears and adds blush while brushing;
-/// `hop` (0–1) bounces the mask when a zone is cleaned.
+/// Where each generated mask image sits, in units of face width.
+private struct MaskArt {
+    var topWidth: CGFloat
+    /// Distance above the eye line where the headband's bottom edge sits.
+    var topLift: CGFloat
+    var noseWidth: CGFloat?
+    var noseDrop: CGFloat = 0
+
+    static func of(_ mask: BrushingMask) -> MaskArt {
+        switch mask {
+        case .bunny: MaskArt(topWidth: 0.95, topLift: 0.3, noseWidth: 0.62, noseDrop: 0.04)
+        case .panda: MaskArt(topWidth: 1.3, topLift: 0.28, noseWidth: 0.2)
+        case .cat: MaskArt(topWidth: 1.25, topLift: 0.28, noseWidth: 0.62, noseDrop: 0.03)
+        case .penguin: MaskArt(topWidth: 1.3, topLift: 0.3, noseWidth: 0.2, noseDrop: 0.03)
+        case .bear: MaskArt(topWidth: 1.3, topLift: 0.28, noseWidth: 0.34, noseDrop: 0.06)
+        case .unicorn: MaskArt(topWidth: 1.15, topLift: 0.3, noseWidth: nil)
+        }
+    }
+}
+
+/// Generated mask images placed on a face. `excitement` (0–1) makes the headband
+/// bounce and adds blush while brushing; `hop` (0–1) jumps when a zone is cleaned.
 struct MaskView: View {
     let mask: BrushingMask
     let face: ScreenFace
@@ -65,9 +86,21 @@ struct MaskView: View {
 
     var body: some View {
         let w = face.width
-        let wiggle = sin(time * 14) * 12 * excitement + sin(time * 2) * 3
+        let art = MaskArt.of(mask)
+        let wiggle = sin(time * 14) * 6 * excitement + sin(time * 2) * 2
+        let squash = 1 + sin(time * 28) * 0.05 * excitement
         ZStack {
-            ears(w: w, wiggle: wiggle)
+            if mask == .panda {
+                ForEach([face.leftEye, face.rightEye], id: \.x) { eye in
+                    let side: Double = eye.x < face.eyeCenter.x ? -1 : 1
+                    Ellipse()
+                        .fill(Color.black.opacity(0.6))
+                        .frame(width: face.eyeDistance * 0.6, height: face.eyeDistance * 0.78)
+                        .blur(radius: w * 0.01)
+                        .rotationEffect(face.roll + .degrees(side * -30))
+                        .position(eye)
+                }
+            }
             ForEach([-1.0, 1.0], id: \.self) { side in
                 Ellipse()
                     .fill(Color.pink.opacity(0.25 + 0.35 * excitement))
@@ -75,107 +108,39 @@ struct MaskView: View {
                     .blur(radius: w * 0.02)
                     .position(face.point(x: side * w * 0.3, y: w * 0.28))
             }
-            nose(w: w)
+            if let noseWidth = art.noseWidth {
+                MaskImage(name: "mask-\(mask.rawValue)-nose", width: w * noseWidth)
+                    .rotationEffect(face.roll)
+                    .position(face.offset(face.nose, x: 0, y: w * art.noseDrop))
+            }
+            let top = MaskImage(name: "mask-\(mask.rawValue)-top", width: w * art.topWidth)
+            let anchor = face.point(x: 0, y: -w * art.topLift)
+            top
+                .scaleEffect(x: 1, y: squash, anchor: .bottom)
+                .rotationEffect(face.roll + .degrees(wiggle), anchor: .bottom)
+                // Place the unrotated bottom edge on the anchor so rotation pivots there.
+                .position(x: anchor.x, y: anchor.y - top.height / 2)
         }
         .offset(y: -hop * w * 0.12)
         .scaleEffect(1 + hop * 0.06)
     }
-
-    @ViewBuilder
-    private func ears(w: CGFloat, wiggle: Double) -> some View {
-        switch mask {
-        case .bunny:
-            ForEach([-1.0, 1.0], id: \.self) { side in
-                ZStack {
-                    Capsule().fill(Color.white)
-                    Capsule().stroke(Color.pink.opacity(0.35), lineWidth: max(1, w * 0.01))
-                    Capsule().fill(Color.pink.opacity(0.6)).scaleEffect(x: 0.5, y: 0.78)
-                }
-                .frame(width: w * 0.26, height: w * 0.82)
-                .rotationEffect(face.roll + .degrees(side * (12 + wiggle)), anchor: .bottom)
-                .position(face.point(x: side * w * 0.2, y: -w * 0.96))
-            }
-        case .panda:
-            ForEach([-1.0, 1.0], id: \.self) { side in
-                Circle()
-                    .fill(Color.black)
-                    .frame(width: w * 0.34, height: w * 0.34)
-                    .scaleEffect(1 + abs(wiggle) / 120)
-                    .rotationEffect(.degrees(side * wiggle))
-                    .position(face.point(x: side * w * 0.4, y: -w * 0.62))
-            }
-            ForEach([face.leftEye, face.rightEye], id: \.x) { eye in
-                let side: Double = eye.x < face.eyeCenter.x ? -1 : 1
-                Ellipse()
-                    .fill(Color.black.opacity(0.7))
-                    .frame(width: face.eyeDistance * 0.6, height: face.eyeDistance * 0.78)
-                    .rotationEffect(face.roll + .degrees(side * -30))
-                    .position(eye)
-            }
-        case .cat:
-            ForEach([-1.0, 1.0], id: \.self) { side in
-                ZStack {
-                    Triangle().fill(Color.orange)
-                    Triangle().fill(Color.pink.opacity(0.7)).scaleEffect(0.55, anchor: .bottom)
-                }
-                .frame(width: w * 0.36, height: w * 0.4)
-                .rotationEffect(face.roll + .degrees(side * (16 + wiggle)), anchor: .bottom)
-                .position(face.point(x: side * w * 0.3, y: -w * 0.74))
-            }
-            whiskers(w: w)
-        case .bear:
-            ForEach([-1.0, 1.0], id: \.self) { side in
-                ZStack {
-                    Circle().fill(Color.brown)
-                    Circle().fill(Color(red: 0.93, green: 0.78, blue: 0.6)).scaleEffect(0.55)
-                }
-                .frame(width: w * 0.32, height: w * 0.32)
-                .rotationEffect(.degrees(side * wiggle))
-                .position(face.point(x: side * w * 0.38, y: -w * 0.6))
-            }
-        }
-    }
-
-    private var noseColor: Color {
-        switch mask {
-        case .bunny, .cat: .pink
-        case .panda: .black
-        case .bear: Color(red: 0.35, green: 0.2, blue: 0.12)
-        }
-    }
-
-    @ViewBuilder
-    private func nose(w: CGFloat) -> some View {
-        Ellipse()
-            .fill(noseColor)
-            .frame(width: w * 0.13, height: w * 0.09)
-            .rotationEffect(face.roll)
-            .position(face.nose)
-        if mask == .bunny { whiskers(w: w) }
-    }
-
-    private func whiskers(w: CGFloat) -> some View {
-        Path { path in
-            for side in [-1.0, 1.0] {
-                for tilt in [-0.06, 0.0, 0.06] {
-                    path.move(to: face.offset(face.nose, x: side * w * 0.1, y: w * 0.02))
-                    path.addLine(to: face.offset(face.nose, x: side * w * 0.38, y: w * (0.02 + tilt * 2)))
-                }
-            }
-        }
-        .stroke(Color.white.opacity(0.9), style: StrokeStyle(lineWidth: max(1.5, w * 0.012), lineCap: .round))
-        .shadow(color: .black.opacity(0.3), radius: 1)
-    }
 }
 
-private struct Triangle: Shape {
-    func path(in rect: CGRect) -> Path {
-        Path { path in
-            path.move(to: CGPoint(x: rect.midX, y: rect.minY))
-            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
-            path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
-            path.closeSubpath()
-        }
+private struct MaskImage: View {
+    let name: String
+    let width: CGFloat
+
+    var height: CGFloat {
+        guard let size = UIImage(named: name)?.size, size.width > 0 else { return width }
+        return width * size.height / size.width
+    }
+
+    var body: some View {
+        Image(name)
+            .resizable()
+            .interpolation(.high)
+            .frame(width: width, height: height)
+            .accessibilityHidden(true)
     }
 }
 
@@ -185,12 +150,12 @@ struct MaskAvatar: View {
     var size: CGFloat = 64
 
     var body: some View {
-        let face = ScreenFace(avatarCenter: CGPoint(x: size / 2, y: size * 0.6), width: size * 0.5)
+        let face = ScreenFace(avatarCenter: CGPoint(x: size / 2, y: size * 0.66), width: size * 0.5)
         ZStack {
             Circle()
                 .fill(Color(red: 1, green: 0.89, blue: 0.78))
                 .frame(width: size * 0.56, height: size * 0.56)
-                .position(x: size / 2, y: size * 0.64)
+                .position(x: size / 2, y: size * 0.7)
             ForEach([face.leftEye, face.rightEye], id: \.x) { eye in
                 Circle().fill(Color.black).frame(width: size * 0.06, height: size * 0.06).position(eye)
             }

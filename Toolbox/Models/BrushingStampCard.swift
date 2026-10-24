@@ -1,7 +1,7 @@
 import Foundation
 
 enum BrushingMask: String, CaseIterable, Identifiable, Codable, Sendable {
-    case bunny, panda, cat, bear
+    case bunny, panda, cat, penguin, bear, unicorn
 
     var id: String { rawValue }
 
@@ -10,7 +10,9 @@ enum BrushingMask: String, CaseIterable, Identifiable, Codable, Sendable {
         case .bunny: "うさぎ"
         case .panda: "パンダ"
         case .cat: "ねこ"
+        case .penguin: "ペンギン"
         case .bear: "くま"
+        case .unicorn: "ユニコーン"
         }
     }
 
@@ -19,7 +21,9 @@ enum BrushingMask: String, CaseIterable, Identifiable, Codable, Sendable {
         switch self {
         case .bunny, .panda: 0
         case .cat: 3
+        case .penguin: 5
         case .bear: 7
+        case .unicorn: 10
         }
     }
 }
