@@ -46,7 +46,7 @@ struct ScreenFace {
 /// Where each dot-art mask sits, in units of face width.
 private struct MaskArt {
     enum Head {
-        /// A pair of ears (the right one mirrored) standing on the crown, `spread` from the center.
+        /// A pair of ears from one sprite (drawn as the right ear, mirrored for the left) on the crown, `spread` from the center.
         case ears(width: CGFloat, spread: CGFloat = 0.32)
         /// One piece on the middle of the crown; `sink` lowers it toward the forehead.
         case center(width: CGFloat, sink: CGFloat = 0)
@@ -54,9 +54,10 @@ private struct MaskArt {
         case wrap(width: CGFloat, lift: CGFloat)
     }
 
-    /// From the eye line to where ears meet the head. Vision's face box stops near the
-    /// eyebrows, so the crown sits well above it.
-    static let crown: CGFloat = 0.66
+    /// From the eye line to where ears meet the head, tuned on a child's face on device.
+    static let crown: CGFloat = 0.5
+    /// Vision's nose landmarks center below the tip on a child's small nose; raise pieces by this.
+    static let noseLift: CGFloat = 0.12
 
     var head: Head?
     var noseWidth: CGFloat?
@@ -82,11 +83,12 @@ private struct MaskArt {
         case .kangaroo: MaskArt(head: .ears(width: 0.24, spread: 0.26), noseWidth: 0.4, noseDrop: 0.05)
         case .zebra: MaskArt(head: .ears(width: 0.26), noseWidth: 0.5, noseDrop: 0.1)
         case .cheetah: MaskArt(head: .ears(width: 0.26, spread: 0.36), noseWidth: 0.55, noseDrop: 0.06)
-        case .lion: MaskArt(head: .wrap(width: 1.7, lift: 0.05), noseWidth: 0.55, noseDrop: 0.06)
+        // The mane frames the face: its ends reach the jaw and its top just clears the head.
+        case .lion: MaskArt(head: .wrap(width: 1.45, lift: -0.5), noseWidth: 0.55, noseDrop: 0.06)
         case .tiger: MaskArt(head: .ears(width: 0.28, spread: 0.36), noseWidth: 0.55, noseDrop: 0.06)
         case .frog: MaskArt(head: .ears(width: 0.3, spread: 0.22))
         case .goat: MaskArt(head: .ears(width: 0.3), noseWidth: 0.4, noseDrop: 0.08)
-        case .sheep: MaskArt(head: .wrap(width: 1.5, lift: 0.2), noseWidth: 0.45, noseDrop: 0.06)
+        case .sheep: MaskArt(head: .wrap(width: 1.25, lift: 0), noseWidth: 0.45, noseDrop: 0.06)
         case .spider: MaskArt(head: .center(width: 0.45))
         case .mouse: MaskArt(head: .ears(width: 0.38, spread: 0.38), noseWidth: 0.58, noseDrop: 0.04)
         case .chick: MaskArt(head: .center(width: 0.4), noseWidth: 0.3, noseDrop: 0.03)
@@ -137,7 +139,7 @@ struct MaskView: View {
             if let noseWidth = art.noseWidth {
                 PixelSprite(name: "pixel-mask-\(mask.rawValue)-nose", width: w * noseWidth)
                     .rotationEffect(face.roll)
-                    .position(face.offset(face.nose, x: 0, y: w * art.noseDrop))
+                    .position(face.offset(face.nose, x: 0, y: w * (art.noseDrop - MaskArt.noseLift)))
             }
             if let eyesWidth = art.eyesWidth {
                 PixelSprite(name: "pixel-mask-\(mask.rawValue)-eyes", width: face.eyeDistance * eyesWidth)
@@ -154,7 +156,7 @@ struct MaskView: View {
                     // Ears flap out of phase, like a sprite's two-frame wiggle.
                     let flap = (sin(time * 14 + side) * 10 * excitement).rounded()
                     ear
-                        .scaleEffect(x: -side, y: squash, anchor: .bottom)
+                        .scaleEffect(x: side, y: squash, anchor: .bottom)
                         .rotationEffect(face.roll + .degrees(side * flap + sway), anchor: .bottom)
                         .position(x: anchor.x, y: anchor.y - ear.height / 2)
                 }

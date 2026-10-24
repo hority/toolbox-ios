@@ -16,6 +16,6 @@ platform :ios do
     profile = "match AppStore #{BUNDLE_ID}"
     widget_profile = "match AppStore #{WIDGET_BUNDLE_ID}"
     ipa = build_app(project: 'Toolbox.xcodeproj', scheme: 'Toolbox', configuration: 'Release', clean: true, output_directory: 'build', output_name: 'Toolbox.ipa', archive_path: 'build/Toolbox.xcarchive', xcargs: "CURRENT_PROJECT_VERSION=#{number} DEVELOPMENT_TEAM=#{team} CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY='Apple Distribution' TOOLBOX_APP_PROFILE='#{profile}' TOOLBOX_WIDGET_PROFILE='#{widget_profile}'", export_options: {method: 'app-store-connect', signingStyle: 'manual', teamID: team, provisioningProfiles: {BUNDLE_ID => profile, WIDGET_BUNDLE_ID => widget_profile}})
-    upload_to_testflight(api_key: key, ipa: ipa, app_identifier: BUNDLE_ID, skip_waiting_for_build_processing: false, wait_processing_interval: 20, wait_processing_timeout_duration: 1200, changelog: 'はみがきコーチ: おめんのカチューシャをなくし、耳は左右別々に頭のてっぺんへ（左右で交互にぴょこぴょこ動きます）。ツノ・ヒレ・クモなどは頭の真ん中に。位置の基準も見直し。確認: 耳やツノの位置が頭に合っているか。', distribute_external: false, submit_beta_review: false)
+    upload_to_testflight(api_key: key, ipa: ipa, app_identifier: BUNDLE_ID, skip_waiting_for_build_processing: false, wait_processing_interval: 20, wait_processing_timeout_duration: 1200, changelog: 'はみがきコーチ: 実機の子どもの顔に合わせて調整。耳の左右を修正し、耳とツノを低く、鼻パーツを上に、ライオンのたてがみとヒツジの毛を顔まわりに合う大きさ・位置に。確認: 耳・鼻・たてがみの位置。', distribute_external: false, submit_beta_review: false)
   end
 end
