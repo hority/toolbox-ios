@@ -121,6 +121,10 @@ struct BrushingCoachView: View {
     @State private var showingStampCard = false
     @State private var idleOwner = UUID()
 
+    init() {
+        PixelStyle.registerFont()
+    }
+
     private var screenFace: ScreenFace? {
         camera.face.map { ScreenFace($0, imageSize: camera.imageSize, viewSize: overlaySize) }
     }
@@ -139,7 +143,7 @@ struct BrushingCoachView: View {
                 cameraView
             }
         }
-        .fontDesign(.rounded)
+        .font(.pixel(17))
         .navigationTitle("はみがきコーチ")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.visible, for: .navigationBar)
@@ -215,7 +219,7 @@ struct BrushingCoachView: View {
             if after < before {
                 let index = BrushingSession.germsPerZone - before
                 let point = GermLayout.positions(for: zone, face: face)[index]
-                sparkles.emit(at: point, count: 28, speed: 60...200, size: 10...22)
+                sparkles.emit(at: point, count: 24, speed: 60...200, size: 12...24)
                 sound.play(after == 0 ? .chime : .pop)
                 germPops += 1
                 if after == 0 { celebrateDate = .now }
@@ -287,8 +291,7 @@ struct BrushingCoachView: View {
                         let size = GermLayout.size(for: face)
                         let defeated = BrushingSession.germsPerZone - session.germsRemaining(in: zone)
                         ForEach(defeated..<BrushingSession.germsPerZone, id: \.self) { index in
-                            GermView(color: GermLayout.colors[index], time: time, seed: Double(index) * 2,
-                                     shaking: brushing)
+                            GermView(index: index, time: time, shaking: brushing)
                                 .frame(width: size, height: size)
                                 .position(positions[index])
                         }
@@ -311,13 +314,12 @@ struct BrushingCoachView: View {
     }
 
     private var readyPanel: some View {
-        Label("ばいきんを やっつけよう！", systemImage: "sparkles")
-            .font(.headline.weight(.heavy))
-            .foregroundStyle(.pink)
-            .padding(.horizontal, 18)
-            .padding(.vertical, 10)
-            .background(.regularMaterial, in: Capsule())
-            .shadow(color: .black.opacity(0.15), radius: 6, y: 3)
+        Text("ばいきんを やっつけよう！")
+            .font(.pixel(20, relativeTo: .headline))
+            .foregroundStyle(PixelStyle.pink)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .pixelPanel()
     }
 
     /// Kept small so the face, mask and germs stay visible.
@@ -328,34 +330,24 @@ struct BrushingCoachView: View {
             Button {
                 phase = .ready
             } label: {
-                Image(systemName: "xmark")
-                    .font(.headline.weight(.heavy))
-                    .frame(width: 44, height: 44)
-                    .background(.regularMaterial, in: Circle())
+                Text("×")
+                    .font(.pixel(24, relativeTo: .headline))
+                    .frame(width: 22, height: 22)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PixelButtonStyle(fill: PixelStyle.paper, foreground: PixelStyle.ink))
             .accessibilityLabel("やめる")
         }
     }
 
     private var statusBubble: some View {
-        Group {
-            if camera.face == nil {
-                Label("おかおを うつしてね", systemImage: "face.dashed")
-            } else if camera.isBrushing() {
-                Label("ゴシゴシ！ いいね！", systemImage: "sparkles")
-                    .foregroundStyle(.white)
-            } else {
-                Label("ブラシを うごかそう", systemImage: "hand.wave.fill")
-            }
-        }
-        .font(.title3.weight(.heavy))
-        .padding(.horizontal, 22)
-        .padding(.vertical, 12)
-        .background(camera.isBrushing() ? AnyShapeStyle(Color.pink.gradient) : AnyShapeStyle(.regularMaterial),
-                    in: Capsule())
-        .shadow(color: .black.opacity(0.2), radius: 8, y: 4)
-        .animation(.spring(duration: 0.25), value: camera.isBrushing())
+        let brushing = camera.isBrushing()
+        let text = camera.face == nil ? "おかおを うつしてね" : brushing ? "ゴシゴシ！ いいね！" : "ブラシを うごかそう"
+        return Text(text)
+            .font(.pixel(22, relativeTo: .title3))
+            .foregroundStyle(brushing ? .white : PixelStyle.ink)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 10)
+            .pixelPanel(brushing ? PixelStyle.pink : PixelStyle.paper)
     }
 
     private var resultPanel: some View {
@@ -363,27 +355,29 @@ struct BrushingCoachView: View {
         return VStack(spacing: 10) {
             StarRow(stars: stars)
             Text(resultMessage(stars: stars))
-                .font(.title2.weight(.heavy))
-                .foregroundStyle(.pink)
+                .font(.pixel(24, relativeTo: .title2))
+                .foregroundStyle(PixelStyle.pink)
                 .multilineTextAlignment(.center)
             if earnedStamp {
-                Label("がんばりカードに スタンプ ゲット！", systemImage: "seal.fill")
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(.orange)
+                Text("がんばりカードに スタンプ ゲット！")
+                    .font(.pixel(15, relativeTo: .subheadline))
+                    .foregroundStyle(PixelStyle.ink)
             }
             ForEach(unlockedMasks) { newMask in
                 HStack {
                     MaskAvatar(mask: newMask, size: 48)
                     Text("NEW！ \(newMask.title)の おめんが つかえるよ")
-                        .font(.subheadline.weight(.heavy))
+                        .font(.pixel(15, relativeTo: .subheadline))
+                        .foregroundStyle(PixelStyle.ink)
                 }
             }
             ZoneMap(current: nil) { zone in
-                BrushingSession.stars(for: session.ratio(for: zone)) >= 2 ? "star.fill" : "star"
+                BrushingSession.stars(for: session.ratio(for: zone)) >= 2
             }
         }
         .frame(maxWidth: .infinity)
-        .brushingCard()
+        .padding(16)
+        .pixelPanel()
     }
 
     private var controls: some View {
@@ -397,38 +391,37 @@ struct BrushingCoachView: View {
                         }
                     }
                 }
+                .padding(.bottom, 6)
+                .padding(.trailing, 6)
             }
-            HStack(spacing: 10) {
+            HStack(spacing: 12) {
                 Button {
                     showingStampCard = true
                 } label: {
-                    VStack(spacing: 2) {
-                        Image(systemName: "seal.fill")
-                        Text("\(stampCard.stamps.count)").font(.caption.weight(.heavy))
+                    VStack(spacing: 0) {
+                        Text("カード").font(.pixel(12, relativeTo: .caption))
+                        Text("\(stampCard.stamps.count)").font(.pixel(20, relativeTo: .headline))
                     }
-                    .frame(width: 56, height: 56)
+                    .frame(width: 44, height: 40)
                 }
-                .buttonStyle(.bordered)
-                .tint(.orange)
+                .buttonStyle(PixelButtonStyle(fill: PixelStyle.yellow, foreground: PixelStyle.ink))
                 .accessibilityLabel("がんばりカード スタンプ \(stampCard.stamps.count)こ")
 
                 Button(action: start) {
                     Text(phase == .finished ? "もういちど！" : "はじめる！")
-                        .font(.title2.weight(.heavy))
-                        .frame(maxWidth: .infinity, minHeight: 56)
-                        .foregroundStyle(.white)
-                        .background(LinearGradient(colors: [.pink, .orange], startPoint: .leading, endPoint: .trailing),
-                                    in: Capsule())
-                        .shadow(color: .pink.opacity(0.4), radius: 8, y: 4)
+                        .font(.pixel(26, relativeTo: .title2))
+                        .frame(maxWidth: .infinity, minHeight: 40)
                 }
+                .buttonStyle(PixelButtonStyle())
                 .disabled(camera.status != .running)
                 .opacity(camera.status == .running ? 1 : 0.5)
             }
             Text("映像は端末内で処理し、保存・送信しません。採点は口もとの動きの量による目安で、磨き残しは判定できません。")
                 .font(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(PixelStyle.ink.opacity(0.7))
         }
-        .brushingCard()
+        .padding(14)
+        .pixelPanel()
     }
 
     private var unauthorizedView: some View {
@@ -457,15 +450,6 @@ struct BrushingCoachView: View {
     }
 }
 
-private extension View {
-    func brushingCard() -> some View {
-        padding(16)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 26))
-            .overlay(RoundedRectangle(cornerRadius: 26).stroke(.white.opacity(0.6), lineWidth: 1.5))
-            .shadow(color: .black.opacity(0.15), radius: 10, y: 4)
-    }
-}
-
 private struct MaskButton: View {
     let mask: BrushingMask
     let selected: Bool
@@ -476,21 +460,23 @@ private struct MaskButton: View {
     var body: some View {
         Button(action: action) {
             VStack(spacing: 2) {
-                MaskAvatar(mask: mask, size: 56)
-                    .saturation(unlocked ? 1 : 0)
-                    .opacity(unlocked ? 1 : 0.5)
+                MaskAvatar(mask: mask, size: 52)
+                    .colorMultiply(unlocked ? .white : .black)
+                    .opacity(unlocked ? 1 : 0.35)
                     .overlay {
-                        if !unlocked { Image(systemName: "lock.fill").foregroundStyle(.secondary) }
+                        if !unlocked {
+                            Text("？").font(.pixel(22)).foregroundStyle(PixelStyle.ink)
+                        }
                     }
-                    .background(Circle().fill(selected ? Color.pink.opacity(0.2) : .clear))
-                    .overlay(Circle().stroke(selected ? Color.pink : .clear, lineWidth: 3))
-                Text(unlocked ? mask.title : "あと\(remaining)かい")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(selected ? .pink : .secondary)
+                Text(unlocked ? mask.title : "あと\(remaining)")
+                    .font(.pixel(12, relativeTo: .caption))
+                    .foregroundStyle(PixelStyle.ink)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
             }
-            .frame(width: 64)
+            .frame(width: 60)
+            .padding(.vertical, 4)
+            .pixelPanel(selected ? PixelStyle.yellow : .white, shadow: selected)
         }
         .buttonStyle(.plain)
         .disabled(!unlocked)
@@ -499,7 +485,7 @@ private struct MaskButton: View {
     }
 }
 
-/// Whole-session ring with a tiny mouth map: upper row then lower row, as seen in the mirror.
+/// Mouth map (upper row then lower row, as seen in the mirror) above a 12-block time bar.
 private struct ProgressHUD: View {
     let session: BrushingSession
 
@@ -509,35 +495,38 @@ private struct ProgressHUD: View {
     ]
 
     var body: some View {
-        ZStack {
-            Circle().fill(.regularMaterial)
-            Circle().stroke(Color.pink.opacity(0.2), lineWidth: 6)
-            Circle()
-                .trim(from: 0, to: 1 - session.remaining / BrushingSession.totalDuration)
-                .stroke(Color.pink.gradient, style: StrokeStyle(lineWidth: 6, lineCap: .round))
-                .rotationEffect(.degrees(-90))
+        let blocks = 12
+        let filled = Int((1 - session.remaining / BrushingSession.totalDuration) * Double(blocks))
+        VStack(spacing: 6) {
             VStack(spacing: 3) {
                 ForEach(Self.rows, id: \.first) { row in
                     HStack(spacing: 3) {
                         ForEach(row) { zone in
-                            RoundedRectangle(cornerRadius: 3)
-                                .fill(color(for: zone))
-                                .frame(width: 11, height: 9)
+                            Rectangle().fill(color(for: zone)).frame(width: 16, height: 12)
                         }
                     }
                 }
             }
+            HStack(spacing: 1) {
+                ForEach(0..<blocks, id: \.self) { index in
+                    Rectangle()
+                        .fill(index < filled ? PixelStyle.pink : PixelStyle.ink.opacity(0.15))
+                        .frame(width: 4, height: 6)
+                }
+            }
         }
-        .frame(width: 68, height: 68)
-        .shadow(color: .black.opacity(0.15), radius: 6, y: 3)
+        .padding(8)
+        .pixelPanel()
         .accessibilityElement()
         .accessibilityLabel("\(session.currentZone?.title ?? "") のこり \(Int(session.remaining.rounded(.up)))びょう")
     }
 
     private func color(for zone: BrushingZone) -> Color {
-        guard let current = session.currentZone else { return .mint }
-        if zone == current { return .pink }
-        return zone.rawValue < current.rawValue ? .mint : Color.secondary.opacity(0.35)
+        guard let current = session.currentZone else { return PixelStyle.mint }
+        if zone == current {
+            return PixelStyle.pink
+        }
+        return zone.rawValue < current.rawValue ? PixelStyle.mint : PixelStyle.ink.opacity(0.15)
     }
 }
 
@@ -548,35 +537,33 @@ private struct ZoneToast: View {
 
     var body: some View {
         Text("つぎは \(title)！")
-            .font(.title.weight(.heavy))
+            .font(.pixel(28, relativeTo: .title))
             .foregroundStyle(.white)
-            .padding(.horizontal, 24)
-            .padding(.vertical, 12)
-            .background(Color.pink.gradient, in: Capsule())
-            .shadow(color: .black.opacity(0.2), radius: 8, y: 4)
-            .scaleEffect(0.7 + 0.3 * min(1, progress * 6))
-            .opacity(progress > 0.8 ? (1 - progress) * 5 : 1)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 10)
+            .pixelPanel(PixelStyle.pink)
+            .scaleEffect(progress < 0.06 ? 0.8 : 1)
+            .opacity(progress > 0.85 && Int(progress * 40) % 2 == 0 ? 0 : 1)
             .accessibilityHidden(true)
     }
 }
 
 private struct StarRow: View {
     let stars: Int
-    @State private var revealed = false
+    @State private var revealed = 0
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 10) {
             ForEach(0..<3, id: \.self) { index in
-                Image(systemName: index < stars ? "star.fill" : "star")
-                    .font(.system(size: 46, weight: .heavy))
-                    .foregroundStyle(index < stars ? Color.yellow.gradient : Color.gray.gradient)
-                    .shadow(color: .orange.opacity(index < stars ? 0.5 : 0), radius: 6)
-                    .scaleEffect(revealed ? 1 : 0.1)
-                    .rotationEffect(.degrees(revealed ? 0 : -90))
-                    .animation(.spring(duration: 0.5, bounce: 0.6).delay(Double(index) * 0.3), value: revealed)
+                PixelSprite(name: index < stars && index < revealed ? "pixel-star" : "pixel-star-empty", width: 44)
             }
         }
-        .onAppear { revealed = true }
+        .task {
+            for step in 1...3 {
+                try? await Task.sleep(for: .milliseconds(350))
+                revealed = step
+            }
+        }
         .accessibilityElement()
         .accessibilityLabel("ほし \(stars)こ")
     }
@@ -585,7 +572,7 @@ private struct StarRow: View {
 /// Upper row then lower row, as the child sees themselves in the mirrored preview.
 private struct ZoneMap: View {
     let current: BrushingZone?
-    let symbol: (BrushingZone) -> String?
+    let done: (BrushingZone) -> Bool
 
     private static let rows: [[BrushingZone]] = [
         [.upperLeft, .upperFront, .upperRight],
@@ -598,16 +585,13 @@ private struct ZoneMap: View {
                 GridRow {
                     ForEach(row) { zone in
                         HStack(spacing: 4) {
-                            if let name = symbol(zone) { Image(systemName: name) }
+                            if done(zone) { PixelSprite(name: "pixel-star", width: 14) }
                             Text(zone.shortTitle)
                         }
-                        .font(.subheadline.weight(.heavy))
-                        .frame(maxWidth: .infinity, minHeight: 34)
-                        .background(zone == current ? AnyShapeStyle(Color.pink.gradient) : AnyShapeStyle(Color.white.opacity(0.5)),
-                                    in: RoundedRectangle(cornerRadius: 12))
-                        .foregroundStyle(zone == current ? Color.white : Color.primary)
-                        .scaleEffect(zone == current ? 1.06 : 1)
-                        .animation(.spring(duration: 0.3, bounce: 0.5), value: current)
+                        .font(.pixel(15, relativeTo: .subheadline))
+                        .foregroundStyle(PixelStyle.ink)
+                        .frame(maxWidth: .infinity, minHeight: 30)
+                        .pixelPanel(done(zone) ? PixelStyle.mint : .white, shadow: false)
                     }
                 }
             }
@@ -629,38 +613,41 @@ private struct BrushingStampCardView: View {
             ScrollView {
                 VStack(spacing: 16) {
                     Text("スタンプ \(card.stamps.count)こ")
-                        .font(.largeTitle.weight(.heavy))
-                        .foregroundStyle(.orange)
+                        .font(.pixel(32, relativeTo: .largeTitle))
+                        .foregroundStyle(PixelStyle.pink)
                     if let nextMask {
                         HStack {
-                            MaskAvatar(mask: nextMask, size: 44).saturation(0)
+                            MaskAvatar(mask: nextMask, size: 44).colorMultiply(.black).opacity(0.4)
                             Text("あと \(nextMask.requiredStamps - card.stamps.count)こで \(nextMask.title)の おめん！")
-                                .font(.headline)
+                                .font(.pixel(16, relativeTo: .headline))
                         }
                     }
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 72), spacing: 12)], spacing: 12) {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 76), spacing: 12)], spacing: 12) {
                         ForEach(card.stamps.reversed()) { stamp in
                             VStack(spacing: 2) {
-                                MaskAvatar(mask: stamp.mask, size: 56)
-                                    .background(Circle().fill(Color.orange.opacity(0.15)))
-                                Text(String(repeating: "★", count: stamp.stars))
-                                    .font(.caption.weight(.heavy))
-                                    .foregroundStyle(.yellow)
+                                MaskAvatar(mask: stamp.mask, size: 52)
+                                HStack(spacing: 1) {
+                                    ForEach(0..<stamp.stars, id: \.self) { _ in
+                                        PixelSprite(name: "pixel-star", width: 12)
+                                    }
+                                }
                                 Text(stamp.date, format: .dateTime.month().day())
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
+                                    .font(.pixel(11, relativeTo: .caption2))
                             }
+                            .padding(6)
+                            .pixelPanel(.white, shadow: false)
                             .accessibilityElement(children: .combine)
                         }
                     }
                     if card.stamps.isEmpty {
                         Text("はみがきを すると スタンプが たまるよ")
-                            .foregroundStyle(.secondary)
+                            .font(.pixel(16))
                     }
                 }
+                .foregroundStyle(PixelStyle.ink)
                 .padding(20)
             }
-            .fontDesign(.rounded)
+            .background(PixelStyle.paper)
             .navigationTitle("がんばりカード")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

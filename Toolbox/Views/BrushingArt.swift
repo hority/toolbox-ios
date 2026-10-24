@@ -55,7 +55,7 @@ struct ScreenFace {
 
 // MARK: - Masks
 
-/// Where each generated mask image sits, in units of face width.
+/// Where each dot-art mask sits, in units of face width.
 private struct MaskArt {
     var topWidth: CGFloat
     /// Distance above the eye line where the headband's bottom edge sits.
@@ -65,18 +65,18 @@ private struct MaskArt {
 
     static func of(_ mask: BrushingMask) -> MaskArt {
         switch mask {
-        case .bunny: MaskArt(topWidth: 0.95, topLift: 0.3, noseWidth: 0.62, noseDrop: 0.04)
-        case .panda: MaskArt(topWidth: 1.3, topLift: 0.28, noseWidth: 0.2)
-        case .cat: MaskArt(topWidth: 1.25, topLift: 0.28, noseWidth: 0.62, noseDrop: 0.03)
-        case .penguin: MaskArt(topWidth: 1.3, topLift: 0.3, noseWidth: 0.2, noseDrop: 0.03)
-        case .bear: MaskArt(topWidth: 1.3, topLift: 0.28, noseWidth: 0.34, noseDrop: 0.06)
-        case .unicorn: MaskArt(topWidth: 1.15, topLift: 0.3, noseWidth: nil)
+        case .bunny: MaskArt(topWidth: 0.95, topLift: 0.3, noseWidth: 0.58, noseDrop: 0.04)
+        case .panda: MaskArt(topWidth: 1.3, topLift: 0.28, noseWidth: 0.27)
+        case .cat: MaskArt(topWidth: 1.25, topLift: 0.28, noseWidth: 0.58, noseDrop: 0.03)
+        case .penguin: MaskArt(topWidth: 1.4, topLift: 0.3, noseWidth: 0.27, noseDrop: 0.03)
+        case .bear: MaskArt(topWidth: 1.3, topLift: 0.28, noseWidth: 0.42, noseDrop: 0.06)
+        case .unicorn: MaskArt(topWidth: 1.3, topLift: 0.3, noseWidth: nil)
         }
     }
 }
 
-/// Generated mask images placed on a face. `excitement` (0–1) makes the headband
-/// bounce and adds blush while brushing; `hop` (0–1) jumps when a zone is cleaned.
+/// Dot-art masks placed on a face. `excitement` (0–1) makes the headband bounce
+/// and adds blush while brushing; `hop` (0–1) jumps when a zone is cleaned.
 struct MaskView: View {
     let mask: BrushingMask
     let face: ScreenFace
@@ -87,33 +87,35 @@ struct MaskView: View {
     var body: some View {
         let w = face.width
         let art = MaskArt.of(mask)
-        let wiggle = sin(time * 14) * 6 * excitement + sin(time * 2) * 2
-        let squash = 1 + sin(time * 28) * 0.05 * excitement
+        // Whole-step wobble reads as sprite animation rather than smooth motion.
+        let wiggle = (sin(time * 14) * 6 * excitement).rounded() + (sin(time * 2) * 2).rounded()
+        let squash = 1 + (sin(time * 28) > 0 ? 0.06 : 0) * excitement
         ZStack {
             if mask == .panda {
                 ForEach([face.leftEye, face.rightEye], id: \.x) { eye in
-                    let side: Double = eye.x < face.eyeCenter.x ? -1 : 1
-                    Ellipse()
+                    PixelFrame(step: face.eyeDistance * 0.12)
                         .fill(Color.black.opacity(0.6))
-                        .frame(width: face.eyeDistance * 0.6, height: face.eyeDistance * 0.78)
-                        .blur(radius: w * 0.01)
-                        .rotationEffect(face.roll + .degrees(side * -30))
+                        .frame(width: face.eyeDistance * 0.6, height: face.eyeDistance * 0.72)
+                        .rotationEffect(face.roll)
                         .position(eye)
                 }
             }
             ForEach([-1.0, 1.0], id: \.self) { side in
-                Ellipse()
-                    .fill(Color.pink.opacity(0.25 + 0.35 * excitement))
-                    .frame(width: w * 0.2, height: w * 0.12)
-                    .blur(radius: w * 0.02)
-                    .position(face.point(x: side * w * 0.3, y: w * 0.28))
+                HStack(spacing: w * 0.03) {
+                    ForEach(0..<2, id: \.self) { _ in
+                        Rectangle().frame(width: w * 0.06, height: w * 0.04)
+                    }
+                }
+                .foregroundStyle(PixelStyle.pink.opacity(0.35 + 0.45 * excitement))
+                .rotationEffect(face.roll)
+                .position(face.point(x: side * w * 0.3, y: w * 0.28))
             }
             if let noseWidth = art.noseWidth {
-                MaskImage(name: "mask-\(mask.rawValue)-nose", width: w * noseWidth)
+                PixelSprite(name: "pixel-mask-\(mask.rawValue)-nose", width: w * noseWidth)
                     .rotationEffect(face.roll)
                     .position(face.offset(face.nose, x: 0, y: w * art.noseDrop))
             }
-            let top = MaskImage(name: "mask-\(mask.rawValue)-top", width: w * art.topWidth)
+            let top = PixelSprite(name: "pixel-mask-\(mask.rawValue)-top", width: w * art.topWidth)
             let anchor = face.point(x: 0, y: -w * art.topLift)
             top
                 .scaleEffect(x: 1, y: squash, anchor: .bottom)
@@ -121,30 +123,11 @@ struct MaskView: View {
                 // Place the unrotated bottom edge on the anchor so rotation pivots there.
                 .position(x: anchor.x, y: anchor.y - top.height / 2)
         }
-        .offset(y: -hop * w * 0.12)
-        .scaleEffect(1 + hop * 0.06)
+        .offset(y: -(hop * 3).rounded() * w * 0.04)
     }
 }
 
-private struct MaskImage: View {
-    let name: String
-    let width: CGFloat
-
-    var height: CGFloat {
-        guard let size = UIImage(named: name)?.size, size.width > 0 else { return width }
-        return width * size.height / size.width
-    }
-
-    var body: some View {
-        Image(name)
-            .resizable()
-            .interpolation(.high)
-            .frame(width: width, height: height)
-            .accessibilityHidden(true)
-    }
-}
-
-/// A mask on a simple drawn face, for pickers and the stamp card.
+/// A mask on a simple dot-art face, for pickers and the stamp card.
 struct MaskAvatar: View {
     let mask: BrushingMask
     var size: CGFloat = 64
@@ -152,12 +135,13 @@ struct MaskAvatar: View {
     var body: some View {
         let face = ScreenFace(avatarCenter: CGPoint(x: size / 2, y: size * 0.66), width: size * 0.5)
         ZStack {
-            Circle()
-                .fill(Color(red: 1, green: 0.89, blue: 0.78))
-                .frame(width: size * 0.56, height: size * 0.56)
+            PixelFrame(step: size * 0.08)
+                .fill(Color(red: 1, green: 0.85, blue: 0.7))
+                .overlay(PixelFrame(step: size * 0.08).stroke(PixelStyle.ink, lineWidth: 2))
+                .frame(width: size * 0.54, height: size * 0.5)
                 .position(x: size / 2, y: size * 0.7)
             ForEach([face.leftEye, face.rightEye], id: \.x) { eye in
-                Circle().fill(Color.black).frame(width: size * 0.06, height: size * 0.06).position(eye)
+                Rectangle().fill(PixelStyle.ink).frame(width: size * 0.06, height: size * 0.08).position(eye)
             }
             MaskView(mask: mask, face: face, time: 0)
         }
@@ -170,7 +154,7 @@ struct MaskAvatar: View {
 // MARK: - Germs
 
 enum GermLayout {
-    static let colors: [Color] = [.green, .purple, .orange]
+    static let sprites = ["pixel-germ-green", "pixel-germ-purple", "pixel-germ-orange"]
 
     /// Germs sit on the side being brushed, as seen in the mirrored preview.
     static func positions(for zone: BrushingZone, face: ScreenFace) -> [CGPoint] {
@@ -182,57 +166,36 @@ enum GermLayout {
         }
         let upper = [BrushingZone.upperRight, .upperFront, .upperLeft].contains(zone)
         let center = face.offset(face.mouth, x: side * w * 0.42, y: upper ? -w * 0.08 : w * 0.24)
-        let spread: [(x: CGFloat, y: CGFloat)] = [(-0.14, 0.04), (0, -0.07), (0.14, 0.04)]
+        let spread: [(x: CGFloat, y: CGFloat)] = [(-0.15, 0.04), (0, -0.08), (0.15, 0.04)]
         return spread.map { face.offset(center, x: w * $0.x, y: w * $0.y) }
     }
 
-    static func size(for face: ScreenFace) -> CGFloat { face.width * 0.18 }
+    static func size(for face: ScreenFace) -> CGFloat { face.width * 0.2 }
 }
 
+/// A dot-art germ that bobs in two-frame steps and shivers while being brushed.
 struct GermView: View {
-    let color: Color
+    let index: Int
     let time: Double
-    let seed: Double
     let shaking: Bool
 
     var body: some View {
         GeometryReader { geometry in
             let s = geometry.size.width
-            ZStack {
-                ForEach(0..<8, id: \.self) { index in
-                    let angle = Double(index) / 8 * 2 * .pi + time * 0.6
-                    Circle()
-                        .fill(color.opacity(0.85))
-                        .frame(width: s * 0.26, height: s * 0.26)
-                        .offset(x: cos(angle) * s * 0.42, y: sin(angle) * s * 0.42)
-                }
-                Circle()
-                    .fill(RadialGradient(colors: [color.opacity(0.65), color], center: .topLeading,
-                                         startRadius: 0, endRadius: s * 0.7))
-                    .frame(width: s * 0.8, height: s * 0.8)
-                ForEach([-1.0, 1.0], id: \.self) { side in
-                    Circle().fill(.white).frame(width: s * 0.22, height: s * 0.22)
-                        .overlay(Circle().fill(.black).frame(width: s * 0.11, height: s * 0.11)
-                            .offset(x: shaking ? sin(time * 30) * s * 0.03 : 0))
-                        .offset(x: side * s * 0.15, y: -s * 0.06)
-                    Capsule().fill(.black).frame(width: s * 0.2, height: s * 0.05)
-                        .rotationEffect(.degrees(side * (shaking ? -30 : -18)))
-                        .offset(x: side * s * 0.15, y: -s * 0.22)
-                }
-                Capsule().fill(.black.opacity(0.75))
-                    .frame(width: s * (shaking ? 0.26 : 0.2), height: s * (shaking ? 0.12 : 0.05))
-                    .offset(y: s * 0.17)
-            }
-            .frame(width: s, height: s)
+            let unit = s / 16
+            let frame = Int(time * 4 + Double(index)) % 2
+            PixelSprite(name: GermLayout.sprites[index], width: s)
+                .scaleEffect(x: frame == 0 ? 1 : 1.0625, y: frame == 0 ? 1 : 0.9375, anchor: .bottom)
+                .offset(x: shaking ? (Int(time * 20) % 2 == 0 ? -unit : unit) : 0,
+                        y: frame == 0 ? 0 : -unit)
         }
-        .offset(x: shaking ? sin(time * 45 + seed) * 4 : 0, y: sin(time * 3 + seed) * 4)
         .accessibilityHidden(true)
     }
 }
 
 // MARK: - Sparkles
 
-/// Short-lived sparkle particles, drawn by a Canvas inside a TimelineView.
+/// Short-lived dot-art sparkles, drawn by a Canvas inside a TimelineView.
 @MainActor
 final class SparkleField {
     private struct Particle {
@@ -242,11 +205,11 @@ final class SparkleField {
         var life: TimeInterval
         var size: CGFloat
         var color: Color
-        var spin: Double
     }
 
-    private static let colors: [Color] = [.yellow, .white, .pink, .cyan, .mint]
+    private static let colors: [Color] = [PixelStyle.yellow, .white, PixelStyle.pink, PixelStyle.sky, PixelStyle.mint]
     private static let limit = 400
+    private static let grid: CGFloat = 4
     private var particles: [Particle] = []
 
     func emit(at point: CGPoint, count: Int, speed: ClosedRange<CGFloat>, size: ClosedRange<CGFloat>, now: Date = .now) {
@@ -260,41 +223,26 @@ final class SparkleField {
                 birth: now,
                 life: .random(in: 0.6...1.2),
                 size: .random(in: size),
-                color: Self.colors.randomElement() ?? .yellow,
-                spin: .random(in: -4...4)
+                color: Self.colors.randomElement() ?? .yellow
             ))
         }
     }
 
+    /// Plus-shaped sparkles snapped to a 4pt grid that shrink in steps and blink out.
     func draw(_ context: inout GraphicsContext, now: Date) {
+        let g = Self.grid
         for particle in particles {
             let age = now.timeIntervalSince(particle.birth)
             guard age >= 0, age < particle.life else { continue }
             let progress = age / particle.life
-            let size = particle.size * (1 - progress * 0.5)
-            var star = context
-            star.opacity = 1 - progress
-            star.translateBy(x: particle.origin.x + particle.velocity.dx * age,
-                             y: particle.origin.y + particle.velocity.dy * age + 80 * age * age)
-            star.rotate(by: .radians(particle.spin * age))
-            star.fill(SparkleShape().path(in: CGRect(x: -size / 2, y: -size / 2, width: size, height: size)),
-                      with: .color(particle.color))
-        }
-    }
-}
-
-struct SparkleShape: Shape {
-    func path(in rect: CGRect) -> Path {
-        let c = CGPoint(x: rect.midX, y: rect.midY)
-        let r = min(rect.width, rect.height) / 2
-        return Path { path in
-            for index in 0..<8 {
-                let angle = Double(index) * .pi / 4 - .pi / 2
-                let radius = index.isMultiple(of: 2) ? r : r * 0.28
-                let point = CGPoint(x: c.x + cos(angle) * radius, y: c.y + sin(angle) * radius)
-                if index == 0 { path.move(to: point) } else { path.addLine(to: point) }
-            }
-            path.closeSubpath()
+            if progress > 0.7, Int(age * 16) % 2 == 0 { continue }
+            let arm = max(1, ((particle.size / 2) * (1 - progress * 0.6) / g).rounded()) * g
+            let x = ((particle.origin.x + particle.velocity.dx * age) / g).rounded() * g
+            let y = ((particle.origin.y + particle.velocity.dy * age + 80 * age * age) / g).rounded() * g
+            var plus = Path()
+            plus.addRect(CGRect(x: x - g / 2, y: y - arm, width: g, height: arm * 2))
+            plus.addRect(CGRect(x: x - arm, y: y - g / 2, width: arm * 2, height: g))
+            context.fill(plus, with: .color(particle.color))
         }
     }
 }
@@ -305,12 +253,12 @@ struct PikapikaBanner: View {
 
     var body: some View {
         Text("ピカピカ！")
-            .font(.system(size: 56, weight: .black, design: .rounded))
-            .foregroundStyle(LinearGradient(colors: [.yellow, .orange], startPoint: .top, endPoint: .bottom))
-            .shadow(color: .white, radius: 0, x: 2, y: 2)
-            .shadow(color: .orange.opacity(0.6), radius: 10)
-            .scaleEffect(0.5 + 0.6 * min(1, progress * 5) - 0.1 * max(0, progress - 0.2))
-            .opacity(progress > 0.75 ? (1 - progress) * 4 : 1)
+            .font(.pixel(56, relativeTo: .largeTitle))
+            .foregroundStyle(PixelStyle.yellow)
+            .shadow(color: PixelStyle.ink, radius: 0, x: 4, y: 4)
+            .shadow(color: PixelStyle.ink, radius: 0, x: -2, y: -2)
+            .scaleEffect(progress < 0.1 ? 0.6 : progress < 0.2 ? 1.15 : 1)
+            .opacity(progress > 0.75 && Int(progress * 40) % 2 == 0 ? 0 : 1)
             .accessibilityHidden(true)
     }
 }

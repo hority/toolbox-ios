@@ -1,0 +1,15 @@
+{
+  "images": [
+    {
+      "filename": "pixel-germ-green.png",
+      "idiom": "universal"
+    }
+  ],
+  "info": {
+    "author": "xcode",
+    "version": 1
+  },
+  "properties": {
+    "preserves-vector-representation": false
+  }
+}
