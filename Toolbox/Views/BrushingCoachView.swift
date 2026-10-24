@@ -161,6 +161,7 @@ struct BrushingCoachView: View {
         }
         .task {
             sound.isEnabled = soundEnabled
+            sound.playMusic(.menu)
             await camera.start()
         }
         .onDisappear {
@@ -170,10 +171,11 @@ struct BrushingCoachView: View {
         }
         .onChange(of: soundEnabled) { _, enabled in
             sound.isEnabled = enabled
-            if enabled, phase == .brushing { sound.startMusic() }
+            if enabled { sound.playMusic(phase == .brushing ? .brushing : .menu) }
         }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active {
+                sound.playMusic(phase == .brushing ? .brushing : .menu)
                 Task { await camera.start() }
             } else {
                 camera.stop()
@@ -183,10 +185,21 @@ struct BrushingCoachView: View {
         }
         .onChange(of: phase) { _, newPhase in
             AttendanceQRIdleTimer.shared.setActive(newPhase == .brushing, owner: idleOwner)
-            if newPhase == .brushing { sound.startMusic() } else { sound.stopMusic() }
+            switch newPhase {
+            case .ready: sound.playMusic(.menu)
+            case .brushing: sound.playMusic(.brushing)
+            // The fanfare plays alone; menu music returns after it in the phase task.
+            case .finished: sound.stopMusic()
+            }
         }
         .task(id: phase) {
-            guard phase == .brushing else { return }
+            guard phase == .brushing else {
+                if phase == .finished {
+                    try? await Task.sleep(for: .seconds(2.5))
+                    if !Task.isCancelled { sound.playMusic(.menu) }
+                }
+                return
+            }
             let clock = ContinuousClock()
             var last = clock.now
             while !Task.isCancelled, phase == .brushing {
@@ -230,6 +243,7 @@ struct BrushingCoachView: View {
     }
 
     private func start() {
+        sound.play(.tap)
         session = BrushingSession()
         celebrateDate = nil
         earnedStamp = false
@@ -325,6 +339,7 @@ struct BrushingCoachView: View {
             ProgressHUD(session: session)
             Spacer()
             Button {
+                sound.play(.tap)
                 phase = .ready
             } label: {
                 Text("×")
@@ -375,6 +390,7 @@ struct BrushingCoachView: View {
                 HStack(spacing: 8) {
                     ForEach(BrushingMask.allCases) { option in
                         MaskButton(mask: option, selected: option == mask) {
+                            sound.play(.select)
                             mask = option
                         }
                     }
@@ -384,6 +400,7 @@ struct BrushingCoachView: View {
             }
             HStack(spacing: 12) {
                 Button {
+                    sound.play(.tap)
                     showingStampCard = true
                 } label: {
                     VStack(spacing: 0) {
