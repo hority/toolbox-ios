@@ -22,6 +22,8 @@ bash ci/build.sh
 
 TestFlight is manual-only and requires owner-managed private signing setup. See [release instructions](docs/RELEASING.md). This repository contains no Penguin game code, assets, or signing material.
 
+The brushing coach bundles the DotGothic16 font under the SIL Open Font License 1.1 (`Toolbox/Resources/Fonts/DotGothic16-OFL.txt`). Its mask sprites were made with OpenAI image generation and pixelated locally; germ, nose and star sprites are hand-authored.
+
 ## Privacy and rights
 
 See [privacy notes](PRIVACY.md). No general source or asset license is granted. Public visibility is not an additional redistribution or reuse license.
