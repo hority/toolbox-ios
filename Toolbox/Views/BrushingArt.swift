@@ -59,6 +59,20 @@ private struct MaskArt {
         case .penguin: MaskArt(topWidth: 1.4, topLift: 0.3, noseWidth: 0.27, noseDrop: 0.03)
         case .bear: MaskArt(topWidth: 1.3, topLift: 0.28, noseWidth: 0.42, noseDrop: 0.06)
         case .unicorn: MaskArt(topWidth: 1.3, topLift: 0.3, noseWidth: nil)
+        case .wolf: MaskArt(topWidth: 1.25, topLift: 0.3, noseWidth: 0.4, noseDrop: 0.06)
+        case .pig: MaskArt(topWidth: 1.25, topLift: 0.28, noseWidth: 0.4, noseDrop: 0.06)
+        case .cow: MaskArt(topWidth: 1.4, topLift: 0.28, noseWidth: 0.55, noseDrop: 0.1)
+        case .horse: MaskArt(topWidth: 1.25, topLift: 0.3, noseWidth: 0.5, noseDrop: 0.1)
+        case .orca: MaskArt(topWidth: 1.1, topLift: 0.3, noseWidth: nil)
+        case .rhino: MaskArt(topWidth: 1.2, topLift: 0.28, noseWidth: 0.45, noseDrop: 0.02)
+        case .giraffe: MaskArt(topWidth: 1.3, topLift: 0.3, noseWidth: 0.45, noseDrop: 0.08)
+        case .kangaroo: MaskArt(topWidth: 1.0, topLift: 0.3, noseWidth: 0.4, noseDrop: 0.05)
+        case .zebra: MaskArt(topWidth: 1.25, topLift: 0.3, noseWidth: 0.5, noseDrop: 0.1)
+        case .cheetah: MaskArt(topWidth: 1.25, topLift: 0.28, noseWidth: 0.55, noseDrop: 0.06)
+        // The mane arches around the face, so its ends sit near the eye line.
+        case .lion: MaskArt(topWidth: 1.7, topLift: 0.05, noseWidth: 0.55, noseDrop: 0.06)
+        case .tiger: MaskArt(topWidth: 1.3, topLift: 0.28, noseWidth: 0.55, noseDrop: 0.06)
+        case .frog: MaskArt(topWidth: 1.2, topLift: 0.3, noseWidth: nil)
         }
     }
 }
