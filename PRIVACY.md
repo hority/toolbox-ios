@@ -1,6 +1,6 @@
 # Privacy
 
-Toolbox has no analytics, advertising, or tracking SDK. The shortcut mini app optionally connects to the user’s ChatGPT account. Tool search and text counting run locally. Text-counter input is kept in memory and is not intentionally persisted or transmitted.
+Toolbox has no analytics, advertising, or tracking SDK. Optional AI features connect to the user’s ChatGPT account through one app-wide AI settings screen (gear on the tool list); today only the shortcut mini app sends AI requests. Tool search and text counting run locally. Text-counter input is kept in memory and is not intentionally persisted or transmitted.
 
 The shortcut studio saves user-created/imported drafts and their recent editing history in the app’s on-device Application Support directory with iOS file protection. Deleting a draft removes it from this library; separately exported files remain under the user’s control. Signed files are temporarily stored for the system share sheet and cleaned up when sharing finishes.
 
@@ -23,3 +23,7 @@ A displayed attendance QR can be read by nearby people or cameras, including on 
 ## Brushing coach
 
 The brushing coach uses the front camera only while its screen is open and the app is active. Frames are analyzed on device with Apple's Vision framework to place the bunny/panda effects and to measure motion around the mouth, then discarded. No photo, video or face data is saved or transmitted. The stamp card keeps only each completed session's date, star count and chosen mask in this app's on-device settings; it is never transmitted. The score is a motion-based guide for children and does not assess plaque or oral health.
+
+## Hiragana hunter
+
+The hiragana hunter uses the rear camera only while its camera screen is open. Apple's VisionKit and Vision frameworks recognize Japanese text on device. When the child presses the shutter or picks a photo from the library, the frame is read in memory; only small square crops of the hiragana the child chooses to keep, plus the letter and date, are saved in this app's Application Support directory with iOS file protection. The full photo is not saved. Letters are spoken with the on-device system voice. Nothing from this feature is transmitted, and it does not use ChatGPT. Deleting a crop in the zukan removes its file.

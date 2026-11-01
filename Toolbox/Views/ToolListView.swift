@@ -3,6 +3,9 @@ import SwiftUI
 struct ToolListView: View {
     @State private var query = ""
     @State private var filter = ToolFilter.all
+    /// One ChatGPT connection shared by every tool's optional AI features.
+    @State private var account = ChatGPTAccount()
+    @State private var showAISettings = false
 
     private var tools: [ToolDefinition] {
         ToolCatalog.tools(matching: query, filter: filter)
@@ -61,7 +64,14 @@ struct ToolListView: View {
             .listStyle(.insetGrouped)
             .navigationTitle("工具箱")
             .searchable(text: $query, prompt: "ツールを探す")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { showAISettings = true } label: { Label("AI設定", systemImage: "gearshape") }
+                }
+            }
+            .sheet(isPresented: $showAISettings) { ChatGPTSettingsView(account: account) }
         }
+        .environment(account)
     }
 
     @ViewBuilder
@@ -75,6 +85,8 @@ struct ToolListView: View {
             AttendanceQRHelpView()
         case .brushingCoach:
             BrushingCoachView()
+        case .hiraganaHunter:
+            HiraganaHunterView()
         }
     }
 }
