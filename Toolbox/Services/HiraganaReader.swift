@@ -4,41 +4,104 @@ import Vision
 /// On-device Japanese text recognition. Each found hiragana gets a small square crop of
 /// where it appeared, so the zukan shows the real sign or page it came from.
 enum HiraganaReader {
-    static func finds(in image: UIImage) async -> [HiraganaFind] {
-        await Task.detached(priority: .userInitiated) { read(image) }.value
+    /// Precision over recall: a letter is offered only when its line is confidently read,
+    /// looks like real Japanese, is not better explained as mirrored text and, for camera
+    /// shots, was also seen by the live scanner moments before (`seenLive`).
+    static func finds(in image: UIImage, seenLive: Set<String>? = nil) async -> [HiraganaFind] {
+        await Task.detached(priority: .userInitiated) { read(image, seenLive: seenLive) }.value
     }
 
-    private static func read(_ image: UIImage) -> [HiraganaFind] {
+    private struct Line {
+        let observation: VNRecognizedTextObservation
+        let candidate: VNRecognizedText
+        var text: String { candidate.string }
+        var box: CGRect { observation.boundingBox }
+    }
+
+    private static let minimumConfidence: Float = 0.5
+    private static let minimumLetterPixels: CGFloat = 18
+
+    private static func read(_ image: UIImage, seenLive: Set<String>?) -> [HiraganaFind] {
         guard let cgImage = upright(image, maxSide: 2400) else { return [] }
-        let request = VNRecognizeTextRequest()
-        request.recognitionLevel = .accurate
-        request.recognitionLanguages = ["ja-JP"]
-        request.usesLanguageCorrection = true
-        do { try VNImageRequestHandler(cgImage: cgImage, orientation: .up).perform([request]) } catch { return [] }
+        let lines = recognize(cgImage).filter(plausible)
+        guard !lines.isEmpty else { return [] }
+        // Mirrored signs (seen through glass, reflections) can still yield kana-like guesses.
+        let mirrored = mirror(cgImage).map { recognize($0).filter(plausible) } ?? []
 
         let size = CGSize(width: cgImage.width, height: cgImage.height)
         var seen = Set<String>()
         var finds: [HiraganaFind] = []
-        for observation in request.results ?? [] {
-            guard let candidate = observation.topCandidates(1).first else { continue }
-            let text = candidate.string
+        for line in lines where !isMirrored(line, mirroredLines: mirrored) {
+            let text = line.text
             let count = text.count
             for (offset, index) in text.indices.enumerated() {
                 let value = String(text[index]).precomposedStringWithCanonicalMapping
                 guard value.count == 1, let character = value.first, Hiragana.isCollectible(character),
-                      seen.insert(value).inserted else { continue }
+                      seenLive?.contains(value) ?? true, !seen.contains(value) else { continue }
                 let range = index..<text.index(after: index)
-                let line = observation.boundingBox
-                var box = (try? candidate.boundingBox(for: range))?.boundingBox ?? line
-                if count > 1, abs(box.width - line.width) < line.width * 0.1, abs(box.height - line.height) < line.height * 0.1 {
-                    box = slice(line, offset: offset, count: count)
+                var box = (try? line.candidate.boundingBox(for: range))?.boundingBox ?? line.box
+                if count > 1, abs(box.width - line.box.width) < line.box.width * 0.1,
+                   abs(box.height - line.box.height) < line.box.height * 0.1 {
+                    box = slice(line.box, offset: offset, count: count)
                 }
-                if let jpeg = crop(cgImage, normalized: box, imageSize: size) {
-                    finds.append(HiraganaFind(character: value, image: jpeg))
-                }
+                guard min(box.width * size.width, box.height * size.height) >= minimumLetterPixels,
+                      let jpeg = crop(cgImage, normalized: box, imageSize: size) else { continue }
+                seen.insert(value)
+                finds.append(HiraganaFind(character: value, image: jpeg))
             }
         }
         return finds
+    }
+
+    private static func recognize(_ image: CGImage) -> [Line] {
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        request.recognitionLanguages = ["ja-JP"]
+        request.usesLanguageCorrection = true
+        do { try VNImageRequestHandler(cgImage: image, orientation: .up).perform([request]) } catch { return [] }
+        return (request.results ?? []).compactMap { observation in
+            observation.topCandidates(1).first.map { Line(observation: observation, candidate: $0) }
+        }
+    }
+
+    /// Lone glyphs and lines mixed with Latin letters or symbols are the usual misreads
+    /// (patterns, mirrored or rotated text), so only confident, mostly-Japanese lines of
+    /// two or more characters count.
+    private static func plausible(_ line: Line) -> Bool {
+        guard line.candidate.confidence >= minimumConfidence else { return false }
+        let letters = line.text.filter { !$0.isWhitespace && !$0.isPunctuation && !$0.isNumber }
+        guard letters.count >= 2 else { return false }
+        return Double(letters.filter(isJapanese).count) / Double(letters.count) >= 0.8
+    }
+
+    static func isJapanese(_ character: Character) -> Bool {
+        character.unicodeScalars.allSatisfy { scalar in
+            switch scalar.value {
+            case 0x3005, 0x30FC, 0x3041...0x309F, 0x30A0...0x30FF, 0x4E00...0x9FFF: true
+            default: false
+            }
+        }
+    }
+
+    /// True when the horizontally flipped photo reads the same place at least as well:
+    /// then the original text is most likely a mirror image.
+    private static func isMirrored(_ line: Line, mirroredLines: [Line]) -> Bool {
+        mirroredLines.contains { other in
+            let box = CGRect(x: 1 - other.box.maxX, y: other.box.minY, width: other.box.width, height: other.box.height)
+            let overlap = box.intersection(line.box)
+            guard !overlap.isNull else { return false }
+            let union = box.width * box.height + line.box.width * line.box.height - overlap.width * overlap.height
+            return overlap.width * overlap.height / union > 0.3 && other.candidate.confidence >= line.candidate.confidence
+        }
+    }
+
+    private static func mirror(_ image: CGImage) -> CGImage? {
+        let size = CGSize(width: image.width, height: image.height)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        return UIGraphicsImageRenderer(size: size, format: format).image { _ in
+            UIImage(cgImage: image, scale: 1, orientation: .upMirrored).draw(in: CGRect(origin: .zero, size: size))
+        }.cgImage
     }
 
     /// Some languages report only a line box; estimate the character's share of it.
