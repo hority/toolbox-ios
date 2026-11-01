@@ -10,8 +10,7 @@ struct ShortcutGenerationView: View {
     @State private var includeDraft = false
     @State private var task: Task<Void, Never>?
     @State private var operation = UUID()
-    private enum Work { case login, models, generation, logout }
-    @State private var workKind: Work = .login
+    @State private var showSettings = false
     @State private var busy = false
     @State private var progress = 0
     @State private var error: String?
@@ -24,41 +23,12 @@ struct ShortcutGenerationView: View {
         NavigationStack {
             Form {
                 Section("ChatGPT") {
-                    if !account.records.registrations.isEmpty {
-                        Picker("アカウント", selection: Binding(get: { account.records.selectedID ?? "" }, set: { id in
-                            cancel()
-                            do { try account.select(id) } catch { self.error = error.localizedDescription }
-                        })) {
-                            ForEach(account.records.registrations, id: \.clientID) { record in
-                                Text("\(record.email) · \(record.clientID.suffix(8))").tag(record.clientID)
-                            }
-                        }.disabled(busy)
+                    LabeledContent("状態", value: account.connected ? "接続済み" : "未接続")
+                    if let name = account.models.first(where: { $0.id == account.model })?.name {
+                        LabeledContent("モデル", value: name)
                     }
-                    Text(account.connected ? "接続済み" : "未接続").foregroundStyle(.secondary)
-                    Button("Continue with ChatGPT") {
-                        run(.login) { try await account.signIn(); try await account.refreshModels() }
-                    }.buttonStyle(ChatGPTConnectionButtonStyle()).disabled(busy)
-                    if !account.records.registrations.isEmpty {
-                        Button("別のアカウントを追加") {
-                            run(.login) { try await account.signIn(newAccount: true); try await account.refreshModels() }
-                        }.disabled(busy)
-                        Button("ログアウト", role: .destructive) {
-                            cancel(); preview = nil
-                            run(.logout) { await account.signOut() }
-                        }.disabled(busy && workKind == .logout)
-                    }
-                    Link("ChatGPTの利用状況・接続管理", destination: URL(string: "https://chatgpt.com/settings/usage")!)
-                    Text("OpenAIの画面でChatGPTプランの利用を許可します。利用できるプラン・モデル・枠はアカウントや提供状況によって異なります。ログイン情報はこの端末のKeychainに保存します。")
-                        .font(.footnote).foregroundStyle(.secondary)
-                }
-                Section("モデル") {
-                    Button("利用可能なモデルを更新") { run(.models) { try await account.refreshModels() } }
-                        .disabled(busy || !account.connected)
-                    if !account.models.isEmpty {
-                        Picker("モデル", selection: $account.model) {
-                            ForEach(account.models) { Text($0.name).tag($0.id) }
-                        }.disabled(busy)
-                    }
+                    Button { showSettings = true } label: { Label("AI設定（ログイン・モデル）", systemImage: "gearshape") }
+                        .disabled(busy)
                 }
                 Section("作りたいショートカット") {
                     TextEditor(text: $instruction).frame(minHeight: 100)
@@ -81,7 +51,7 @@ struct ShortcutGenerationView: View {
                     }.disabled(busy || !account.connected || account.model.isEmpty || instruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     if busy {
                         HStack { ProgressView(); Text(progress > 0 ? "生成中 · \(progress)文字" : "処理中…") }
-                        Button("中断", role: .cancel) { cancel(); account.cancelSignIn() }
+                        Button("中断", role: .cancel) { cancel() }
                     }
                     Text("生成結果は編集できる下書き案です。確認して保存するまで元の内容は変えません。実行やShortcutyへの送信は行いません。中断しても送信済みの内容は取り消せません。")
                         .font(.footnote).foregroundStyle(.secondary)
@@ -93,7 +63,7 @@ struct ShortcutGenerationView: View {
                 Button("OpenAIへ送信して生成") {
                     let prompt = pendingInstruction
                     let draft = pendingDraft
-                    run(.generation) {
+                    run {
                         let value = try await ShortcutAI.generate(instruction: prompt, selectedDraft: draft, account: account) { progress = $0 }
                         try Task.checkCancellation()
                         preview = value
@@ -103,6 +73,7 @@ struct ShortcutGenerationView: View {
             } message: {
                 Text("宛先: api.openai.com\n指示: \(pendingInstruction)\n\(pendingDraft.map { "下書き「\($0.name)」の全JSONも送ります。" } ?? "現在の下書きは送りません。")\nChatGPTの利用枠を使います。")
             }
+            .sheet(isPresented: $showSettings) { ChatGPTSettingsView(account: account) }
             .sheet(item: $preview) { draft in
                 ShortcutAIReview(draft: draft) { value in
                     try save(value)
@@ -114,8 +85,8 @@ struct ShortcutGenerationView: View {
                 Button("閉じる") { error = nil; account.notice = nil }
             } message: { Text(error ?? account.notice ?? "") }
             .onChange(of: account.epoch) { _, _ in
-                // Login completion changes the epoch too; its task must continue to fetch the new catalog.
-                if workKind == .generation || workKind == .models { cancel(); preview = nil }
+                // Account changes invalidate any in-flight generation and its preview.
+                cancel(); preview = nil
             }
             .onDisappear { cancel() }
         }
@@ -125,9 +96,9 @@ struct ShortcutGenerationView: View {
     private func cancel() {
         operation = UUID(); task?.cancel(); task = nil; busy = false; clearPending()
     }
-    private func run(_ kind: Work, _ work: @escaping @MainActor () async throws -> Void) {
+    private func run(_ work: @escaping @MainActor () async throws -> Void) {
         guard !busy else { return }
-        let id = UUID(); operation = id; busy = true; progress = 0; workKind = kind
+        let id = UUID(); operation = id; busy = true; progress = 0
         task = Task { @MainActor in
             defer { if operation == id { busy = false; task = nil; clearPending() } }
             do { try await work() }

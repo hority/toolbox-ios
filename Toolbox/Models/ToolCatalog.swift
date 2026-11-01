@@ -5,6 +5,7 @@ enum ToolID: String, Hashable, Sendable {
     case shortcutSigning
     case attendanceQR
     case brushingCoach
+    case hiraganaHunter
 }
 
 enum ToolAvailability: Equatable, Sendable {
@@ -93,6 +94,14 @@ enum ToolCatalog {
             symbol: "mouth",
             availability: .available,
             keywords: ["歯みがき", "歯磨き", "はみがき", "子供", "こども", "カメラ", "うさぎ", "パンダ", "タイマー"]
+        ),
+        ToolDefinition(
+            id: .hiraganaHunter,
+            title: "ひらがなハンター",
+            subtitle: "看板や本を撮って「あ」〜「ん」をずかんに集める",
+            symbol: "camera.viewfinder",
+            availability: .available,
+            keywords: ["ひらがな", "平仮名", "文字", "子供", "こども", "カメラ", "図鑑", "ずかん", "OCR"]
         )
     ]
 

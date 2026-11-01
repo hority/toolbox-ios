@@ -3,7 +3,7 @@ import UniformTypeIdentifiers
 
 struct ShortcutSigningView: View {
     @State private var library = ShortcutLibrary()
-    @State private var account = ChatGPTAccount()
+    @Environment(ChatGPTAccount.self) private var account
     @State private var showAI = false
     @State private var showImport = false
     @State private var importing = false
