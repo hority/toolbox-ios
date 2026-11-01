@@ -188,6 +188,8 @@ private struct HiraganaCameraView: View {
     let voice: HiraganaVoice
     @State private var scanner: DataScannerViewController?
     @State private var live: [String] = []
+    /// When each letter was last seen by the live scanner; a shot keeps only recent ones.
+    @State private var lastSeen: [String: Date] = [:]
     @State private var reading = false
     @State private var finds: FindBatch?
     @State private var unavailable: String?
@@ -282,6 +284,8 @@ private struct HiraganaCameraView: View {
                 return nil
             }.joined()
             live = Hiragana.unique(in: text)
+            let now = Date()
+            for character in live { lastSeen[character] = now }
         }
     }
 
@@ -293,7 +297,8 @@ private struct HiraganaCameraView: View {
             collection.error = "しゃしんを とれませんでした。"
             return
         }
-        finds = FindBatch(finds: await HiraganaReader.finds(in: image))
+        let recent = Set(lastSeen.filter { $0.value > Date().addingTimeInterval(-3) }.keys)
+        finds = FindBatch(finds: await HiraganaReader.finds(in: image, seenLive: recent))
     }
 }
 
